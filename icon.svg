@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="112" fill="#2a1d10"/>
+  <g fill="none" stroke="#bfa15a" stroke-width="16" stroke-linejoin="round" stroke-linecap="round">
+    <!-- Costa del libro -->
+    <path d="M256 140v244" />
+    <!-- Pagine di sinistra -->
+    <path d="M256 140c-40-30-96-34-140-24v244c44-10 100-6 140 24z" fill="#3a2916"/>
+    <!-- Pagine di destra -->
+    <path d="M256 140c40-30 96-34 140-24v244c-44-10-100-6-140 24z" fill="#3a2916"/>
+  </g>
+  <text x="256" y="300" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="150" font-weight="700" fill="#bfa15a">M</text>
+</svg>

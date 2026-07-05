@@ -1,0 +1,20 @@
+version: "3.7"
+
+services:
+  app_proxy:
+    environment:
+      APP_HOST: anticristiancpu-malachia_web_1
+      APP_PORT: 3001
+
+  web:
+    image: ghcr.io/anticristiancpu/malachia:latest
+    restart: on-failure
+    stop_grace_period: 1m
+    environment:
+      - NODE_ENV=production
+      - BACKEND_PORT=3001
+      - TZ=Europe/Rome
+    volumes:
+      # Database SQLite (con WAL/SHM) e immagini caricate — dati persistenti
+      - ${APP_DATA_DIR}/data:/app/data
+      - ${APP_DATA_DIR}/uploads:/app/uploads

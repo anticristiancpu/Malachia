@@ -1,0 +1,17 @@
+services:
+  malachia:
+    build: .
+    image: malachia:latest
+    container_name: malachia
+    restart: unless-stopped
+    ports:
+      # host:container — cambia la porta host a sinistra se 3001 è occupata
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      BACKEND_PORT: "3001"
+    volumes:
+      # Database SQLite attuale (con WAL/SHM) — dati persistenti
+      - ./data:/app/data
+      # Copertine, sfondi e altri caricamenti — dati persistenti
+      - ./uploads:/app/uploads

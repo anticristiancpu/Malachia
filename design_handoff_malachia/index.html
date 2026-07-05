@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Malachia — esplorazione design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=UnifrakturCook:wght@700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    /* Pergamena / legno scuro / cotto / oro */
+    --m-parchment: #f4ecd8;
+    --m-parchment-2: #ebe0c4;
+    --m-parchment-3: #ddcfa8;
+    --m-ink: #2a1d10;
+    --m-ink-soft: #3a2a1a;
+    --m-ink-muted: #6b5638;
+    --m-wood: #3a2a1a;
+    --m-wood-dark: #2a1d10;
+    --m-terracotta: #7a3b2e;
+    --m-terracotta-soft: #9a5142;
+    --m-gold: #bfa15a;
+    --m-gold-deep: #9a7e3a;
+    --m-gold-pale: #d8c389;
+    --m-lapis: #2a3a5a;
+    --m-vermilion: #a83a26;
+    --m-rule: rgba(58, 42, 26, 0.22);
+    --m-rule-strong: rgba(58, 42, 26, 0.45);
+  }
+
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'EB Garamond', 'Cormorant Garamond', Georgia, serif;
+    background: #1c160d;
+    color: var(--m-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Carta a texture (subtle noise + warm gradient) */
+  .m-parchment {
+    background-color: var(--m-parchment);
+    background-image:
+      radial-gradient(ellipse at 20% 10%, rgba(191,161,90,0.10), transparent 60%),
+      radial-gradient(ellipse at 80% 90%, rgba(122,59,46,0.08), transparent 55%),
+      radial-gradient(circle at 50% 50%, rgba(122,59,46,0.04), transparent 70%);
+  }
+  .m-parchment-dark {
+    background-color: #1a140a;
+    background-image:
+      radial-gradient(ellipse at 20% 10%, rgba(191,161,90,0.12), transparent 60%),
+      radial-gradient(ellipse at 80% 90%, rgba(122,59,46,0.10), transparent 55%);
+    color: var(--m-parchment);
+  }
+
+  .m-serif { font-family: 'Cormorant Garamond', 'EB Garamond', Georgia, serif; }
+  .m-body  { font-family: 'EB Garamond', Georgia, serif; }
+  .m-mono  { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  .m-gothic { font-family: 'UnifrakturCook', 'Cormorant Garamond', serif; }
+
+  /* Small caps eyebrow */
+  .m-eyebrow {
+    font-family: 'EB Garamond', serif;
+    font-variant-caps: all-small-caps;
+    letter-spacing: 0.22em;
+    color: var(--m-ink-muted);
+    font-size: 12px;
+  }
+  .m-eyebrow-light { color: var(--m-gold-pale); }
+
+  /* Decorative rule */
+  .m-rule { height: 1px; background: var(--m-rule); }
+  .m-rule-strong { height: 1px; background: var(--m-rule-strong); }
+
+  /* Book cover placeholder — illuminated initial style */
+  .m-book {
+    position: relative;
+    background: var(--cover-bg, #3a2a1a);
+    color: var(--cover-fg, var(--m-parchment));
+    box-shadow:
+      inset 0 0 0 1px rgba(0,0,0,0.25),
+      inset 4px 0 0 0 rgba(0,0,0,0.18),
+      2px 2px 0 rgba(0,0,0,0.18),
+      4px 4px 14px rgba(0,0,0,0.25);
+    overflow: hidden;
+    border-radius: 1px;
+  }
+  .m-book::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      linear-gradient(90deg, rgba(0,0,0,0.25) 0 6px, transparent 6px 10px, rgba(255,255,255,0.05) 10px 12px, transparent 12px 100%);
+    pointer-events: none;
+  }
+  .m-book::after {
+    content: '';
+    position: absolute; inset: 6%;
+    border: 1px solid currentColor;
+    opacity: 0.35;
+    pointer-events: none;
+  }
+
+  /* Tag/chip pill (parchment) */
+  .m-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 10px;
+    border: 1px solid var(--m-rule-strong);
+    border-radius: 999px;
+    font-size: 12px;
+    font-variant-caps: all-small-caps;
+    letter-spacing: 0.12em;
+    color: var(--m-ink-soft);
+    background: rgba(255,255,255,0.15);
+  }
+  .m-chip-dark {
+    color: var(--m-gold-pale);
+    border-color: rgba(216,195,137,0.35);
+    background: rgba(255,255,255,0.04);
+  }
+
+  /* Button */
+  .m-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 18px;
+    background: var(--m-ink);
+    color: var(--m-parchment);
+    font-family: 'EB Garamond', serif;
+    font-variant-caps: all-small-caps;
+    letter-spacing: 0.16em;
+    border: 1px solid var(--m-ink);
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .m-btn-ghost {
+    background: transparent;
+    color: var(--m-ink);
+    border: 1px solid var(--m-ink-soft);
+  }
+  .m-btn-gold {
+    background: var(--m-gold);
+    color: var(--m-ink);
+    border-color: var(--m-gold-deep);
+  }
+
+  /* Drop cap */
+  .m-dropcap::first-letter {
+    font-family: 'UnifrakturCook', 'Cormorant Garamond', serif;
+    font-size: 4.2em;
+    line-height: 0.85;
+    float: left;
+    padding: 6px 10px 0 0;
+    color: var(--m-vermilion);
+  }
+
+  /* Folio number */
+  .m-folio {
+    font-family: 'EB Garamond', serif;
+    font-style: italic;
+    color: var(--m-ink-muted);
+    font-size: 13px;
+  }
+
+  /* Marginalia */
+  .m-marginalia {
+    font-family: 'EB Garamond', serif;
+    font-style: italic;
+    color: var(--m-ink-muted);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  /* Striped placeholder */
+  .m-stripes {
+    background-image: repeating-linear-gradient(
+      135deg,
+      rgba(58,42,26,0.10) 0 6px,
+      rgba(58,42,26,0.02) 6px 12px
+    );
+  }
+
+  /* Tabular numerals */
+  .m-nums { font-variant-numeric: tabular-nums lining-nums; }
+
+  /* Subtle inner gold border */
+  .m-frame-gold {
+    box-shadow: inset 0 0 0 1px var(--m-gold-deep), inset 0 0 0 4px var(--m-parchment), inset 0 0 0 5px rgba(154,126,58,0.35);
+  }
+
+  /* Scrollbars dimmed */
+  * { scrollbar-width: thin; scrollbar-color: rgba(122,59,46,0.4) transparent; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="atoms.jsx"></script>
+<script type="text/babel" src="screens-brand.jsx"></script>
+<script type="text/babel" src="screens-web.jsx"></script>
+<script type="text/babel" src="screens-web-2.jsx"></script>
+<script type="text/babel" src="screens-mobile.jsx"></script>
+<script type="text/babel">
+/* Compose the design canvas (inline to avoid loader race) */
+function App() {
+  return (
+    <DesignCanvas>
+      <DCSection id="brand" title="I · Marchio & Sistema" subtitle="Identità e linguaggio visivo di Malachia.">
+        <DCArtboard id="brand-mark" label="Wordmark & introduzione" width={1200} height={760}><BrandMark/></DCArtboard>
+        <DCArtboard id="system" label="Sistema visivo · pigmenti, caratteri, ornamenti" width={1200} height={900}><System/></DCArtboard>
+        <DCArtboard id="covers" label="Copertine · 3 varianti di capilettera" width={1200} height={680}><Covers/></DCArtboard>
+      </DCSection>
+
+      <DCSection id="web" title="II · Web · schermate principali" subtitle="App responsive — vista desktop a 1280×880.">
+        <DCArtboard id="web-dashboard" label="Studio · dashboard" width={1280} height={880}><WebDashboard/></DCArtboard>
+        <DCArtboard id="web-library" label="Libreria · griglia copertine" width={1280} height={880}><WebLibrary/></DCArtboard>
+        <DCArtboard id="web-detail" label="Dettaglio libro · marginalia" width={1280} height={880}><WebBookDetail/></DCArtboard>
+        <DCArtboard id="web-add" label="Aggiungi volume · ricerca + ISBN" width={1280} height={880}><WebAdd/></DCArtboard>
+        <DCArtboard id="web-search" label="Ricerca avanzata" width={1280} height={880}><WebSearch/></DCArtboard>
+        <DCArtboard id="web-wishlist" label="Lista dei desideri" width={1280} height={880}><WebWishlist/></DCArtboard>
+      </DCSection>
+
+      <DCSection id="organize" title="III · Organizzazione" subtitle="Scaffali, collocazioni fisiche, costellazioni di autori.">
+        <DCArtboard id="web-shelves" label="Scaffali · scrinia" width={1280} height={880}><WebShelves/></DCArtboard>
+        <DCArtboard id="web-map" label="Mappa della biblioteca · libreria fisica" width={1280} height={880}><WebMap/></DCArtboard>
+        <DCArtboard id="web-graph" label="Grafo · costellazione autori" width={1280} height={880}><WebGraph/></DCArtboard>
+      </DCSection>
+
+      <DCSection id="reflect" title="IV · Riflessione & ricordo" subtitle="Diario di lettura, citazioni, statistiche dell'anno.">
+        <DCArtboard id="web-notes" label="Note & citazioni · commonplace book" width={1280} height={880}><WebNotes/></DCArtboard>
+        <DCArtboard id="web-annales" label="Annales · statistiche annuali (scuro)" width={1280} height={880}><WebAnnales/></DCArtboard>
+      </DCSection>
+
+      <DCSection id="mobile" title="V · Mobile · iPhone" subtitle="Stesso linguaggio, tradotto in 390×844.">
+        <DCArtboard id="m-home" label="Studio · home" width={390} height={844}><MobileHome/></DCArtboard>
+        <DCArtboard id="m-library" label="Libreria · griglia" width={390} height={844}><MobileLibrary/></DCArtboard>
+        <DCArtboard id="m-detail" label="Dettaglio libro · marginalia" width={390} height={844}><MobileBookDetail/></DCArtboard>
+        <DCArtboard id="m-reading" label="In lettura · sessione (scuro)" width={390} height={844}><MobileReading/></DCArtboard>
+        <DCArtboard id="m-annales" label="Annales · wrap (scuro)" width={390} height={844}><MobileAnnales/></DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App/>);
+</script>
+</body>
+</html>

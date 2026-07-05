@@ -1,0 +1,33 @@
+# Dipendenze (reinstallate nell'immagine)
+node_modules
+backend/node_modules
+frontend/node_modules
+frontend/dist
+
+# Dati persistenti (montati come volumi, NON copiati nell'immagine)
+data
+uploads
+malachia.db
+malachia.db-wal
+malachia.db-shm
+
+# Ambiente e locale
+.env
+.git
+.github
+.gitignore
+.claude
+
+# File dello store Umbrel (non servono nell'immagine)
+anticristiancpu-malachia
+icon.svg
+UMBREL.md
+
+# Materiale di design / documentazione non necessario al runtime
+References EDGEUI
+design_handoff_*
+documentazione
+references
+sfondi
+remigio.html
+*.md

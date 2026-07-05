@@ -1,0 +1,13 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "C:\\Users\\antic\\OneDrive\\Desktop\\L'Abbazia\\Malachia\\frontend",
+      "port": 5173,
+      "url": "http://localhost:5173/libro/338018c2-0ed3-4125-8ac7-d7961b6f7733"
+    }
+  ]
+}

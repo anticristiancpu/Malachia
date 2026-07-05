@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Remigio · Cellerario dell'Abbazia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:      #1a140a;
+  --bg2:     #211809;
+  --bg3:     #2a1e0e;
+  --bg4:     #342616;
+  --bg5:     #3e2e1c;
+  --txt:     #f4ecd8;
+  --txt2:    #ddcfa8;
+  --txt3:    #b89e78;
+  --muted:   #6b5638;
+  --acc:     #7a3b2e;
+  --acc2:    #9a5142;
+  --acc3:    #c47050;
+  --gld:     #bfa15a;
+  --gld2:    #d8c389;
+  --gld3:    #9a7e3a;
+  --rule:    rgba(191,161,90,.13);
+  --rule2:   rgba(191,161,90,.25);
+  --rule3:   rgba(191,161,90,.42);
+}
+
+html{scroll-behavior:smooth}
+
+body{
+  background:#1a140a;
+  background-image:
+    radial-gradient(ellipse at 18% 12%, rgba(191,161,90,.09) 0,transparent 55%),
+    radial-gradient(ellipse at 82% 88%, rgba(122,59,46,.07) 0,transparent 50%);
+  color:var(--txt);
+  font-family:'EB Garamond',Georgia,serif;
+  font-size:17px;
+  line-height:1.65;
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── HEADER ───────────────────────────────── */
+.hdr{
+  background:linear-gradient(180deg,#0e0a04 0%,#150f06 100%);
+  text-align:center;
+  padding:2.2rem 1rem 1.8rem;
+  border-bottom:1px solid var(--rule3);
+  position:relative;
+}
+.hdr::before,.hdr::after{
+  content:'';position:absolute;left:2rem;right:2rem;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(191,161,90,.22),transparent);
+}
+.hdr::before{top:9px}.hdr::after{bottom:9px}
+.hdr-gem{
+  font-size:.88rem;letter-spacing:.9rem;
+  color:var(--gld3);margin-bottom:.5rem;user-select:none;
+}
+.hdr h1{
+  font-family:'Cormorant Garamond',serif;
+  font-size:clamp(2.4rem,6vw,3.6rem);
+  font-weight:600;letter-spacing:.45rem;
+  color:var(--txt2);
+}
+.hdr-sub{
+  font-family:'EB Garamond',serif;font-style:italic;
+  font-size:.9rem;color:var(--muted);letter-spacing:.09rem;margin-top:.3rem;
+}
+.hdr-rule{
+  margin:.55rem auto 0;color:var(--gld3);
+  font-size:.78rem;letter-spacing:1.1rem;user-select:none;
+}
+
+/* ── WRAP ─────────────────────────────────── */
+.wrap{max-width:820px;margin:0 auto;padding:1.6rem 1rem 3rem}
+
+/* ── LIVE DATE BAR ────────────────────────── */
+.live-bar{
+  display:flex;align-items:center;justify-content:center;gap:.9rem;
+  padding:.55rem 1rem;margin-bottom:1.4rem;
+  background:var(--bg2);border:1px solid var(--rule);
+}
+.live-dow{
+  font-variant:small-caps;letter-spacing:.2em;
+  font-size:.78rem;color:var(--muted);
+}
+.live-main{
+  font-family:'Cormorant Garamond',serif;
+  font-size:1.05rem;color:var(--txt2);font-weight:500;
+}
+.live-sep{color:var(--rule2);padding:0 .1rem}
+.live-time{
+  font-family:'JetBrains Mono',monospace;
+  font-size:.8rem;color:var(--muted);letter-spacing:.04rem;
+}
+
+/* ── TABS ─────────────────────────────────── */
+.tabs-nav{display:flex;border-bottom:1px solid var(--rule3)}
+.tab-btn{
+  flex:1;padding:.72rem .8rem;
+  background:var(--bg2);border:1px solid var(--rule2);
+  border-bottom:none;color:var(--txt3);
+  font-family:'EB Garamond',serif;font-size:.88rem;
+  cursor:pointer;transition:background .15s,color .15s;
+  text-align:center;
+}
+.tab-btn:first-child{border-right:none}
+.tab-btn.on{
+  background:var(--bg3);color:var(--txt);
+  border-bottom:1px solid var(--bg3);
+  margin-bottom:-1px;z-index:1;position:relative;
+}
+.tab-btn:hover:not(.on){background:var(--bg3);color:var(--txt2)}
+
+.tab{
+  display:none;background:var(--bg3);
+  border:1px solid var(--rule2);border-top:none;
+  padding:2rem 1.8rem;
+}
+.tab.on{display:block}
+
+/* ── SECTION TITLE ────────────────────────── */
+.sec-title{
+  font-family:'Cormorant Garamond',serif;
+  font-size:1.3rem;font-weight:600;
+  color:var(--gld);text-align:center;
+  margin-bottom:1.6rem;padding-bottom:.85rem;
+  border-bottom:1px solid var(--rule);
+}
+.sec-title::after{
+  content:'✦';display:block;font-size:.68rem;
+  color:var(--gld3);margin-top:.4rem;
+}
+
+/* ── FORM ─────────────────────────────────── */
+.fg{margin-bottom:1.1rem}
+.fg label{
+  display:block;font-size:.86rem;
+  color:var(--txt3);margin-bottom:.32rem;font-style:italic;
+}
+.fg label b{font-style:normal;font-weight:600;color:var(--txt2)}
+input[type=number],input[type=date],input[type=text],select{
+  width:100%;padding:.52rem .72rem;
+  background:var(--bg2);border:1px solid var(--rule2);
+  border-radius:0;color:var(--txt);
+  font-family:'EB Garamond',serif;font-size:1rem;
+  -webkit-appearance:none;appearance:none;color-scheme:dark;
+  transition:border-color .15s,box-shadow .15s;
+}
+input:focus,select:focus{
+  outline:none;border-color:var(--gld3);
+  box-shadow:0 0 0 2px rgba(154,126,58,.16);
+}
+input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+input[type=date]::-webkit-calendar-picker-indicator{
+  filter:invert(.55) sepia(.6) hue-rotate(5deg) saturate(.6);
+  cursor:pointer;opacity:.7;
+}
+
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:1.1rem}
+@media(max-width:520px){.frow{grid-template-columns:1fr}}
+
+/* ── BUTTONS ──────────────────────────────── */
+.btn{
+  display:inline-block;padding:.6rem 1.4rem;
+  background:var(--acc);color:var(--txt);
+  font-family:'EB Garamond',serif;font-size:.96rem;
+  font-variant:small-caps;letter-spacing:.12em;
+  border:1px solid rgba(122,59,46,.5);cursor:pointer;
+  transition:background .15s;white-space:nowrap;
+}
+.btn:hover{background:var(--acc2)}
+.btn-sm{padding:.26rem .6rem;font-size:.8rem;letter-spacing:.08em}
+.btn-del{background:#4a1414;border-color:rgba(160,40,40,.35)}
+.btn-del:hover{background:#6a2020}
+.btn-sec{background:var(--bg4);border-color:var(--rule2)}
+.btn-sec:hover{background:var(--bg5)}
+.btn-save{background:#1c3820;border-color:rgba(50,130,50,.28)}
+.btn-save:hover{background:#264e2c}
+
+.calc-row{text-align:center;margin-top:1rem}
+
+/* ── ORN ──────────────────────────────────── */
+.orn{
+  text-align:center;color:var(--gld3);
+  letter-spacing:.65rem;margin:1.2rem 0;
+  font-size:.82rem;user-select:none;
+}
+
+/* ── RESULTS ──────────────────────────────── */
+.res{margin-top:1.6rem}
+.res.hidden{display:none}
+
+/* ── DATE STRIP ───────────────────────────── */
+.dstrip{
+  display:flex;align-items:stretch;
+  gap:.6rem;margin-bottom:1.4rem;
+}
+.dchip{
+  flex:1;padding:1rem .8rem;
+  background:var(--bg2);border:1px solid var(--rule2);
+  text-align:center;position:relative;overflow:hidden;
+}
+.dchip::before{
+  content:'';position:absolute;
+  top:0;left:0;right:0;height:2px;
+}
+.dchip.oggi::before{background:var(--acc)}
+.dchip.stip::before{background:var(--gld)}
+.dchip-badge{
+  font-variant:small-caps;letter-spacing:.22em;
+  font-size:.72rem;display:block;margin-bottom:.4rem;
+}
+.dchip.oggi .dchip-badge{color:var(--acc2)}
+.dchip.stip .dchip-badge{color:var(--gld)}
+.dchip-dow{
+  font-variant:small-caps;letter-spacing:.14em;
+  color:var(--muted);font-size:.75rem;
+  display:block;margin-bottom:.1rem;
+}
+.dchip-day{
+  font-family:'Cormorant Garamond',serif;
+  font-size:2.4rem;font-weight:700;
+  color:var(--txt);line-height:1;display:block;
+  margin-bottom:.1rem;
+}
+.dchip.oggi .dchip-day{color:var(--acc3)}
+.dchip.stip .dchip-day{color:var(--gld2)}
+.dchip-mese{
+  font-variant:small-caps;letter-spacing:.12em;
+  font-size:.78rem;color:var(--txt3);display:block;
+}
+.dchip-time{
+  font-family:'JetBrains Mono',monospace;
+  font-size:.76rem;color:var(--muted);
+  display:block;margin-top:.45rem;
+}
+.darrow{
+  flex:0 0 auto;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:0 .3rem;
+}
+.darrow-n{
+  font-family:'Cormorant Garamond',serif;
+  font-size:1.6rem;font-weight:700;
+  color:var(--gld3);line-height:1;display:block;
+}
+.darrow-l{
+  font-variant:small-caps;letter-spacing:.1em;
+  font-size:.68rem;color:var(--muted);
+  display:block;margin-top:.18rem;text-align:center;
+  line-height:1.2;
+}
+
+/* ── DAY GRID ─────────────────────────────── */
+.dgrid-wrap{
+  margin-bottom:1.5rem;
+}
+.dgrid-legend{
+  display:flex;gap:1rem;align-items:center;
+  margin-bottom:.6rem;
+  font-variant:small-caps;letter-spacing:.14em;
+  font-size:.72rem;color:var(--muted);
+}
+.dleg-dot{
+  display:inline-block;width:8px;height:8px;
+  border-radius:0;margin-right:.3rem;
+}
+.dleg-dot.oggi{background:var(--acc)}
+.dleg-dot.stip{background:var(--gld)}
+.dgrid{
+  display:flex;flex-wrap:wrap;gap:4px;
+  /* scroll if many days */
+  overflow-y:auto;
+  max-height:280px;
+  padding:2px; /* evita clipping bordi */
+}
+.dcard{
+  width:44px;height:60px;
+  background:var(--bg2);
+  border:1px solid var(--rule);
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:1px;flex-shrink:0;
+  padding:3px 2px;
+  transition:border-color .12s;
+  position:relative;
+}
+.dcard:hover{border-color:var(--rule2)}
+.dcard.oggi{
+  background:rgba(122,59,46,.14);
+  border:1.5px solid var(--acc);
+}
+.dcard.stip{
+  background:rgba(191,161,90,.07);
+  border:1.5px solid var(--gld);
+}
+.dcard.stip.oggi{
+  background:rgba(122,59,46,.14);
+  border:1.5px solid var(--gld);
+}
+.dc-dow{
+  font-variant:small-caps;letter-spacing:.1em;
+  font-size:.58rem;color:var(--muted);line-height:1;
+}
+.dcard.oggi .dc-dow{color:var(--acc2)}
+.dcard.stip .dc-dow{color:var(--gld3)}
+.dc-n{
+  font-family:'Cormorant Garamond',serif;
+  font-size:1.35rem;font-weight:700;
+  color:var(--txt);line-height:1;
+}
+.dcard.oggi .dc-n{color:var(--acc3)}
+.dcard.stip .dc-n{color:var(--gld2)}
+.dc-m{
+  font-variant:small-caps;letter-spacing:.08em;
+  font-size:.55rem;color:var(--muted);line-height:1;
+}
+/* small tag for today/salary indicator */
+.dcard-tag{
+  position:absolute;bottom:2px;left:0;right:0;
+  text-align:center;font-size:.42rem;
+  font-variant:small-caps;letter-spacing:.1em;
+  line-height:1;
+}
+.dcard.oggi .dcard-tag{color:var(--acc2)}
+.dcard.stip .dcard-tag{color:var(--gld3)}
+
+/* ── BUDGET BLOCK ─────────────────────────── */
+.budget-block{
+  padding:1.4rem 1.2rem;
+  background:var(--bg2);
+  border:1px solid var(--rule);
+  border-top:2px solid var(--acc);
+  margin-bottom:1.2rem;
+  text-align:center;
+}
+.budget-lbl{
+  font-variant:small-caps;letter-spacing:.18em;
+  font-size:.78rem;color:var(--muted);margin-bottom:.3rem;
+}
+.budget-val{
+  font-family:'Cormorant Garamond',serif;
+  font-size:clamp(2.2rem,7vw,3.2rem);
+  font-weight:700;color:var(--gld2);line-height:1;
+}
+.budget-sub{
+  font-style:italic;color:var(--muted);
+  font-size:.84rem;margin-top:.2rem;
+}
+
+/* ── GAUGE ────────────────────────────────── */
+.gauge-wrap{margin:1.2rem 0 1rem}
+.gauge-lbl{
+  font-variant:small-caps;letter-spacing:.15em;
+  font-size:.7rem;color:var(--muted);margin-bottom:.5rem;
+}
+.gauge-bar{display:flex;gap:4px;margin-bottom:.6rem}
+.gauge-seg{
+  flex:1;height:9px;
+  background:var(--bg4);
+  border:1px solid var(--rule);
+  transition:background .3s;
+}
+.status-chip{
+  display:inline-block;padding:.26rem 1rem;
+  font-family:'EB Garamond',serif;
+  font-variant:small-caps;font-size:.8rem;
+  letter-spacing:.18em;color:var(--txt);
+}
+
+/* ── MONASTIC MESSAGE ─────────────────────── */
+.msg{
+  margin-top:1.2rem;padding:1rem 1.4rem;
+  border-left:2px solid var(--gld3);
+  background:rgba(191,161,90,.03);
+  font-style:italic;color:var(--txt3);
+  font-size:1rem;line-height:1.78;
+}
+.msg-q{
+  font-size:1.8rem;color:var(--gld3);
+  float:left;margin-right:.4rem;margin-top:.05rem;
+  font-style:normal;line-height:.8;
+}
+
+/* ════ TAB 2 ════ */
+.saldo-row{
+  display:flex;gap:1rem;align-items:flex-end;
+  margin-bottom:1.4rem;padding-bottom:1.2rem;
+  border-bottom:1px solid var(--rule);
+}
+.saldo-row .fg{flex:1;margin-bottom:0}
+
+.add-form{
+  margin-bottom:1.3rem;padding:1rem 1.1rem;
+  background:var(--bg2);border:1px dashed rgba(191,161,90,.18);
+}
+.add-title{
+  font-variant:small-caps;letter-spacing:.14em;
+  font-size:.7rem;color:var(--gld3);margin-bottom:.7rem;
+}
+.add-grid{
+  display:grid;grid-template-columns:2fr 1fr 1.5fr auto;
+  gap:.5rem;align-items:flex-end;
+}
+@media(max-width:580px){
+  .add-grid{grid-template-columns:1fr 1fr}
+  .add-grid .btn{grid-column:1/-1;text-align:center}
+}
+.add-grid .fg{margin-bottom:0}
+
+.total-bar{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:.8rem 1rem;
+  background:var(--bg2);border:1px solid var(--rule);
+  border-left:2px solid var(--gld3);
+  margin-bottom:1rem;
+}
+.total-label{font-style:italic;font-size:.84rem;color:var(--muted)}
+.total-val{
+  font-family:'Cormorant Garamond',serif;
+  font-size:1.5rem;font-weight:600;color:var(--gld2);
+}
+.total-val.neg{color:#c47070}
+
+.tbl-wrap{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse;font-size:.92rem;min-width:480px}
+.tbl thead tr{background:#0e0a04;color:var(--txt2)}
+.tbl th{
+  padding:.52rem .75rem;
+  font-family:'EB Garamond',serif;
+  font-variant:small-caps;letter-spacing:.14em;
+  font-size:.72rem;font-weight:400;text-align:left;
+}
+.tbl tbody tr{border-bottom:1px solid var(--rule);transition:background .1s}
+.tbl tbody tr:nth-child(even){background:rgba(255,255,255,.018)}
+.tbl tbody tr:hover{background:rgba(191,161,90,.04)}
+.tbl td{padding:.46rem .75rem;vertical-align:middle}
+.td-pos{color:#7ab07a;font-weight:600}
+.td-neg{color:#c47070;font-weight:600}
+.td-cum{font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--gld3)}
+.td-cum.neg{color:#c47070}
+.td-act{white-space:nowrap}
+.ledger-in{
+  width:100%;padding:.2rem .38rem;
+  background:var(--bg);border:1px solid var(--rule2);
+  font-family:'EB Garamond',serif;font-size:.9rem;
+  color:var(--txt);color-scheme:dark;
+}
+select.ledger-in{padding:.2rem .3rem}
+
+.empty{
+  text-align:center;padding:2rem 1rem;
+  color:var(--muted);font-style:italic;font-size:.9rem;
+}
+
+.chart-wrap{
+  margin-top:2rem;padding:1.2rem 1rem;
+  background:var(--bg2);border:1px solid var(--rule);
+}
+.chart-title{
+  font-variant:small-caps;letter-spacing:.14em;
+  font-size:.74rem;color:var(--gld3);
+  text-align:center;margin-bottom:1rem;
+}
+
+.foot{
+  text-align:center;padding:1.1rem 1rem;
+  color:var(--muted);font-size:.78rem;font-style:italic;
+  border-top:1px solid var(--rule);margin-top:2rem;
+}
+
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div class="hdr-gem">· ✦ · ✦ · ✦ ·</div>
+  <h1>REMIGIO</h1>
+  <div class="hdr-sub">Cellerario dell&rsquo;Abbazia &middot; Custode delle Riserve</div>
+  <div class="hdr-rule">· · · · ·</div>
+</header>
+
+<div class="wrap">
+
+  <!-- live date always visible -->
+  <div class="live-bar">
+    <span class="live-dow" id="lb-dow"></span>
+    <span class="live-sep">·</span>
+    <span class="live-main" id="lb-main"></span>
+    <span class="live-sep">·</span>
+    <span class="live-time" id="lb-time"></span>
+  </div>
+
+  <div class="tabs-nav">
+    <button class="tab-btn on" id="btn1" onclick="switchTab(1)">
+      ⚖&thinsp; Il Libro delle Spese
+    </button>
+    <button class="tab-btn" id="btn2" onclick="switchTab(2)">
+      ✎&thinsp; Il Registro dei Risparmi
+    </button>
+  </div>
+
+  <!-- ═══════ TAB 1 ═══════ -->
+  <div class="tab on" id="tab1">
+    <h2 class="sec-title">Il Libro delle Spese Quotidiane</h2>
+
+    <div class="frow">
+      <div class="fg">
+        <label><b>Riserve nel conto</b><br>La cifra disponibile in questo momento (€)</label>
+        <input type="number" id="cifra" placeholder="es. 850,00" step="0.01" min="0">
+      </div>
+      <div class="fg">
+        <label><b>Data dello stipendio</b><br>Il giorno in cui giungeranno i nuovi proventi</label>
+        <input type="date" id="data-stip" min="">
+      </div>
+    </div>
+
+    <div class="calc-row">
+      <button class="btn" onclick="calcola()">⚖&ensp;Consulta il Libro</button>
+    </div>
+
+    <!-- RESULTS -->
+    <div class="res hidden" id="res">
+
+      <div class="orn">· · ·</div>
+
+      <!-- DATE STRIP -->
+      <div class="dstrip">
+        <div class="dchip oggi">
+          <span class="dchip-badge">Oggi</span>
+          <span class="dchip-dow" id="ds-oggi-dow"></span>
+          <span class="dchip-day" id="ds-oggi-day"></span>
+          <span class="dchip-mese" id="ds-oggi-mese"></span>
+          <span class="dchip-time" id="ds-oggi-time"></span>
+        </div>
+
+        <div class="darrow">
+          <span class="darrow-n" id="darrow-n">—</span>
+          <span class="darrow-l">giorni<br>rimasti</span>
+        </div>
+
+        <div class="dchip stip">
+          <span class="dchip-badge">Stipendio</span>
+          <span class="dchip-dow" id="ds-stip-dow"></span>
+          <span class="dchip-day" id="ds-stip-day"></span>
+          <span class="dchip-mese" id="ds-stip-mese"></span>
+        </div>
+      </div>
+
+      <!-- DAY GRID -->
+      <div class="dgrid-wrap">
+        <div class="dgrid-legend">
+          <span><span class="dleg-dot oggi"></span>oggi</span>
+          <span><span class="dleg-dot stip"></span>stipendio</span>
+        </div>
+        <div class="dgrid" id="dgrid"></div>
+      </div>
+
+      <!-- BUDGET -->
+      <div class="budget-block">
+        <div class="budget-lbl">Budget Giornaliero Disponibile</div>
+        <div class="budget-val" id="bval">—</div>
+        <div class="budget-sub" id="bsub">al giorno</div>
+      </div>
+
+      <div class="orn">· · ·</div>
+
+      <!-- GAUGE -->
+      <div class="gauge-wrap">
+        <div class="gauge-lbl">Stato delle Riserve dell&rsquo;Abbazia</div>
+        <div class="gauge-bar">
+          <div class="gauge-seg" id="g1"></div>
+          <div class="gauge-seg" id="g2"></div>
+          <div class="gauge-seg" id="g3"></div>
+          <div class="gauge-seg" id="g4"></div>
+        </div>
+        <div class="status-chip" id="schip"></div>
+      </div>
+
+      <!-- MESSAGE -->
+      <div class="msg">
+        <span class="msg-q">&#10077;</span>
+        <span id="mtxt"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ TAB 2 ═══════ -->
+  <div class="tab" id="tab2">
+    <h2 class="sec-title">Il Registro dei Risparmi</h2>
+
+    <div class="saldo-row">
+      <div class="fg">
+        <label><b>Saldo iniziale</b> — Le riserve custodite prima del primo registro (€)</label>
+        <input type="number" id="s-inizio" placeholder="es. 5000,00" step="0.01">
+      </div>
+      <button class="btn" onclick="setSaldo()">Aggiorna</button>
+    </div>
+
+    <div class="add-form">
+      <div class="add-title">✦&ensp;Aggiungi voce al registro</div>
+      <div class="add-grid">
+        <div class="fg">
+          <label>Mese</label>
+          <select id="n-mese">
+            <option>Gennaio</option><option>Febbraio</option><option>Marzo</option>
+            <option>Aprile</option><option>Maggio</option><option>Giugno</option>
+            <option>Luglio</option><option>Agosto</option><option>Settembre</option>
+            <option>Ottobre</option><option>Novembre</option><option>Dicembre</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>Anno</label>
+          <input type="number" id="n-anno" placeholder="2025" min="2000" max="2100">
+        </div>
+        <div class="fg">
+          <label>Importo (€, positivo o negativo)</label>
+          <input type="number" id="n-imp" placeholder="es. +500 o −200" step="0.01">
+        </div>
+        <button class="btn" onclick="addVoce()">+ Inserisci</button>
+      </div>
+    </div>
+
+    <div class="total-bar">
+      <span class="total-label">Totale cumulativo delle riserve</span>
+      <span class="total-val" id="t-val">€ 0,00</span>
+    </div>
+
+    <div id="empty-st" class="empty">
+      Il registro è vergine. Nulla è ancora scritto, frate.
+    </div>
+
+    <div class="tbl-wrap hidden" id="tbl-wrap">
+      <table class="tbl" id="ledger">
+        <thead>
+          <tr>
+            <th>Mese</th><th>Anno</th>
+            <th>Importo (€)</th><th>Cumulativo (€)</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="t-body"></tbody>
+      </table>
+    </div>
+
+    <div class="chart-wrap">
+      <div class="chart-title">Andamento delle Riserve nel Tempo</div>
+      <canvas id="chart"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<footer class="foot">
+  <em>&ldquo;Nulla dies sine linea.&rdquo; &mdash; Ogni giorno è scrittura, ogni soldo è storia.</em>
+</footer>
+
+<script>
+// ── CONSTANTS ───────────────────────────────
+const GG = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+const MM_LONG = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+                 'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+const MM_SHORT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+
+// ── STATE ────────────────────────────────────
+const DEF = {t1:{c:'',ds:''},t2:{si:0,voci:[]}};
+let S = JSON.parse(JSON.stringify(DEF));
+let savChart = null;
+let editId = null;
+
+// ── PERSIST ──────────────────────────────────
+function load(){
+  try{const r=localStorage.getItem('remigio2');if(r)S=Object.assign({},DEF,JSON.parse(r));}
+  catch(e){}
+}
+function save(){localStorage.setItem('remigio2',JSON.stringify(S));}
+
+// ── LIVE CLOCK ───────────────────────────────
+function tickClock(){
+  const now = new Date();
+  const dow = GG[now.getDay()];
+  const d   = now.getDate();
+  const mo  = MM_LONG[now.getMonth()];
+  const yr  = now.getFullYear();
+  const hh  = String(now.getHours()).padStart(2,'0');
+  const mm  = String(now.getMinutes()).padStart(2,'0');
+  const ss  = String(now.getSeconds()).padStart(2,'0');
+  document.getElementById('lb-dow').textContent  = dow;
+  document.getElementById('lb-main').textContent = `${d} ${mo} ${yr}`;
+  document.getElementById('lb-time').textContent = `${hh}:${mm}:${ss}`;
+  // also update the live time inside the oggi chip if visible
+  const el = document.getElementById('ds-oggi-time');
+  if(el) el.textContent = `${hh}:${mm}`;
+}
+
+// ── TABS ─────────────────────────────────────
+function switchTab(n){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('on'));
+  document.getElementById('tab'+n).classList.add('on');
+  document.getElementById('btn'+n).classList.add('on');
+  if(n===2) setTimeout(renderChart,80);
+}
+
+// ── STATUS ───────────────────────────────────
+const STATUS = {
+  abbondante:{lvl:4,col:'#2f6636',txt:'Abbondante'},
+  sufficiente:{lvl:3,col:'#7a6218',txt:'Sufficiente'},
+  scarso:{lvl:2,col:'#7a4018',txt:'Scarso'},
+  critico:{lvl:1,col:'#7a1a1a',txt:'Critico — Prudentia'},
+};
+const MSGS = {
+  abbondante:[
+    'Le dispense dell’abbazia sono ricolme, frate. La provvidenza si è dimostrata generosa questo mese. Non dimenticare coloro che bussano alla porta bisognosi.',
+    'Vi è abbondanza nelle cantine: goditi questa grazia con spirito di gratitudine. Il cellerario prudente non dimentica però che ogni stagione può mutare.',
+    'Le riserve parlano chiaro: il cielo ha sorriso alle tue fatiche. Procedi con serenità, frate, ma serba sempre quella prudenza che si addice a chi governa le risorse altrui.'
+  ],
+  sufficiente:[
+    'Le riserve sono sufficienti. Né abbondanza né penuria — questo è il giusto mezzo che il cellerario saggio riconosce come segno di equilibrio e virtù.',
+    'Vi è quanto basta per il sostentamento quotidiano. Procedi con giudizio, frate, e le riserve dureranno fino al giorno convenuto senza scompenso.',
+    'I conti rivelano una situazione dignitosa. Né troppo né poco: è la misura di chi sa governare con saggezza ciò che è stato affidato alle sue cure.'
+  ],
+  scarso:[
+    'Le riserve si assottigliano, frate. Ogni spesa deve essere giustificata e necessaria. Rinuncia al superfluo senza rimpianto: la parsimonia è essa stessa una virtù.',
+    'Il cellerario vigile ti ammonisce: i giorni che restano sono molti rispetto a quel che rimane. Ogni obolo pesi sulla bilancia della necessità, non del desiderio.',
+    'Non è ancora penuria, ma i segnali richiedono attenzione. Stringi la cintura, frate, e rinuncia a ogni spesa non strettamente necessaria al sostentamento.'
+  ],
+  critico:[
+    'Tempus fugit et pecunia magis. La situazione è critica, frate. Solo l’essenziale — nessuna spesa che non sia strettamente necessaria. Prega e risparmia con uguale fervore.',
+    'Le cantine sono quasi vuote. Il cellerario severo non conosce deroghe: nessun obolo destinato a ciò che non sia puro sostentamento. La disciplina è la tua unica fortezza.',
+    'La situazione esige la massima vigilanza. I conti non tollerano capricci né debolezze. Solo il necessario, frate, solo il necessario.'
+  ]
+};
+
+function getStatus(b){
+  if(b>=50)return 'abbondante';
+  if(b>=25)return 'sufficiente';
+  if(b>=10)return 'scarso';
+  return 'critico';
+}
+
+// ── CALC ─────────────────────────────────────
+function calcola(){
+  const cifra = parseFloat(document.getElementById('cifra').value);
+  const dsVal = document.getElementById('data-stip').value;
+  if(isNaN(cifra)||!dsVal||cifra<0) return;
+
+  const oggi = new Date(); oggi.setHours(0,0,0,0);
+  const stip = new Date(dsVal); stip.setHours(0,0,0,0);
+  const giorni = Math.max(0, Math.round((stip - oggi) / 86400000));
+
+  S.t1.c  = cifra;
+  S.t1.ds = dsVal;
+  save();
+
+  const budget = giorni > 0 ? cifra / giorni : cifra;
+  const st  = getStatus(budget);
+  const inf = STATUS[st];
+
+  // show panel
+  document.getElementById('res').classList.remove('hidden');
+
+  // fill date chips
+  const ogg = new Date();
+  const hh = String(ogg.getHours()).padStart(2,'0');
+  const mn = String(ogg.getMinutes()).padStart(2,'0');
+  document.getElementById('ds-oggi-dow').textContent  = GG[ogg.getDay()];
+  document.getElementById('ds-oggi-day').textContent  = ogg.getDate();
+  document.getElementById('ds-oggi-mese').textContent = MM_LONG[ogg.getMonth()] + ' ' + ogg.getFullYear();
+  document.getElementById('ds-oggi-time').textContent = `${hh}:${mn}`;
+
+  document.getElementById('ds-stip-dow').textContent  = GG[stip.getDay()];
+  document.getElementById('ds-stip-day').textContent  = stip.getDate();
+  document.getElementById('ds-stip-mese').textContent = MM_LONG[stip.getMonth()] + ' ' + stip.getFullYear();
+  document.getElementById('darrow-n').textContent = giorni;
+
+  // day grid
+  renderDayGrid(oggi, stip);
+
+  // budget
+  document.getElementById('bval').textContent = '€ ' + fmt(budget);
+  document.getElementById('bsub').textContent =
+    giorni > 0 ? `al giorno · ${giorni} giorni rimanenti · € ${fmt(cifra)} totali` : 'stipendio oggi — buona giornata, frate';
+
+  // gauge
+  for(let i=1;i<=4;i++){
+    const seg = document.getElementById('g'+i);
+    if(i<=inf.lvl){
+      seg.style.background = inf.col;
+      seg.style.opacity = (0.4 + (i/inf.lvl)*0.6).toFixed(2);
+    }else{
+      seg.style.background='';
+      seg.style.opacity='1';
+    }
+  }
+  const chip = document.getElementById('schip');
+  chip.textContent = inf.txt;
+  chip.style.background = inf.col;
+
+  // message
+  const idx = Math.abs(Math.floor(cifra * (giorni+1))) % MSGS[st].length;
+  document.getElementById('mtxt').textContent = MSGS[st][idx];
+}
+
+// ── DAY GRID ─────────────────────────────────
+function renderDayGrid(oggi, stip){
+  const grid = document.getElementById('dgrid');
+  grid.innerHTML = '';
+  const todayTs = oggi.getTime();
+  const stipTs  = stip.getTime();
+  let cur = new Date(oggi);
+  // max 90 days rendered
+  let count = 0;
+  while(cur.getTime() <= stipTs && count < 90){
+    const ts     = cur.getTime();
+    const isOggi = ts === todayTs;
+    const isStip = ts === stipTs;
+    const dow    = GG[cur.getDay()];
+    const day    = cur.getDate();
+    const mon    = MM_SHORT[cur.getMonth()];
+    const cls    = 'dcard' + (isOggi?' oggi':'') + (isStip?' stip':'');
+    const tag    = isOggi && isStip ? 'oggi · stip' : isOggi ? 'oggi' : isStip ? 'stip' : '';
+    grid.insertAdjacentHTML('beforeend',
+      `<div class="${cls}" title="${dow} ${day} ${mon}">
+        <span class="dc-dow">${dow}</span>
+        <span class="dc-n">${day}</span>
+        <span class="dc-m">${mon}</span>
+        ${tag?`<span class="dcard-tag">${tag}</span>`:''}
+      </div>`
+    );
+    cur.setDate(cur.getDate()+1);
+    count++;
+  }
+  if(count >= 90 && stip.getTime() > cur.getTime()){
+    grid.insertAdjacentHTML('beforeend',
+      `<div class="dcard stip" title="Stipendio">
+        <span class="dc-dow">${GG[stip.getDay()]}</span>
+        <span class="dc-n">${stip.getDate()}</span>
+        <span class="dc-m">${MM_SHORT[stip.getMonth()]}</span>
+        <span class="dcard-tag">stip</span>
+      </div>`
+    );
+  }
+}
+
+// ── TAB 2 ────────────────────────────────────
+function setSaldo(){
+  const v = parseFloat(document.getElementById('s-inizio').value)||0;
+  S.t2.si = v; save(); renderLedger();
+}
+
+function addVoce(){
+  const mese  = document.getElementById('n-mese').value;
+  const anno  = parseInt(document.getElementById('n-anno').value);
+  const imp   = parseFloat(document.getElementById('n-imp').value);
+  if(!mese||isNaN(anno)||isNaN(imp)){
+    alert('Compila tutti i campi prima di aggiungere una voce, frate.'); return;
+  }
+  S.t2.voci.push({id:Date.now(),mese,anno,imp});
+  save(); document.getElementById('n-imp').value=''; renderLedger();
+}
+
+function delVoce(id){S.t2.voci=S.t2.voci.filter(v=>v.id!==id);save();renderLedger();}
+function startEdit(id){editId=id;renderLedger();}
+function cancelEdit(){editId=null;renderLedger();}
+function saveEdit(id){
+  const v=S.t2.voci.find(v=>v.id===id); if(!v)return;
+  v.mese=document.getElementById('em-'+id).value;
+  v.anno=parseInt(document.getElementById('ea-'+id).value)||v.anno;
+  v.imp =parseFloat(document.getElementById('ei-'+id).value)||v.imp;
+  editId=null; save(); renderLedger();
+}
+
+const MESI = MM_LONG;
+
+function renderLedger(){
+  const voci = S.t2.voci;
+  const empty = document.getElementById('empty-st');
+  const wrap  = document.getElementById('tbl-wrap');
+  if(!voci.length){empty.classList.remove('hidden');wrap.classList.add('hidden');}
+  else{empty.classList.add('hidden');wrap.classList.remove('hidden');}
+
+  let cum = S.t2.si||0;
+  const rows = voci.map(v=>{cum+=v.imp;return{...v,cum};});
+
+  const tv = document.getElementById('t-val');
+  tv.textContent = (cum<0?'-':'')+'€ '+fmt(Math.abs(cum));
+  tv.className = 'total-val'+(cum<0?' neg':'');
+
+  document.getElementById('t-body').innerHTML = rows.map(v=>{
+    if(editId===v.id){
+      const opts = MESI.map(m=>`<option${m===v.mese?' selected':''}>${m}</option>`).join('');
+      return`<tr>
+        <td><select class="ledger-in" id="em-${v.id}">${opts}</select></td>
+        <td><input class="ledger-in" type="number" id="ea-${v.id}" value="${v.anno}" style="width:68px"></td>
+        <td><input class="ledger-in" type="number" id="ei-${v.id}" value="${v.imp}" step="0.01"></td>
+        <td class="td-cum">&mdash;</td>
+        <td class="td-act">
+          <button class="btn btn-sm btn-save" onclick="saveEdit(${v.id})">&#10003;</button>
+          <button class="btn btn-sm btn-sec" onclick="cancelEdit()" style="margin-left:2px">&#10005;</button>
+        </td></tr>`;
+    }
+    const ip = v.imp>=0;
+    const cp = v.cum>=0;
+    return`<tr>
+      <td>${v.mese}</td><td>${v.anno}</td>
+      <td class="${ip?'td-pos':'td-neg'}">${ip?'+':'-'}€ ${fmt(Math.abs(v.imp))}</td>
+      <td class="td-cum${cp?'':' neg'}">${cp?'':'-'}€ ${fmt(Math.abs(v.cum))}</td>
+      <td class="td-act">
+        <button class="btn btn-sm btn-sec" onclick="startEdit(${v.id})" title="Modifica">&#9998;</button>
+        <button class="btn btn-sm btn-del" onclick="delVoce(${v.id})" style="margin-left:2px" title="Elimina">&#10005;</button>
+      </td></tr>`;
+  }).join('');
+  renderChart();
+}
+
+function renderChart(){
+  const canvas = document.getElementById('chart');
+  if(!canvas) return;
+  let cum = S.t2.si||0;
+  const labels=[],data=[];
+  if(S.t2.si){labels.push('Inizio');data.push(cum);}
+  S.t2.voci.forEach(v=>{
+    cum+=v.imp;
+    labels.push(v.mese.substring(0,3)+' '+v.anno);
+    data.push(cum);
+  });
+  if(savChart){savChart.destroy();savChart=null;}
+  if(!data.length) return;
+  savChart = new Chart(canvas.getContext('2d'),{
+    type:'line',
+    data:{
+      labels,
+      datasets:[{
+        data,
+        borderColor:'#9a7e3a',
+        backgroundColor:'rgba(154,126,58,.08)',
+        borderWidth:1.5,
+        pointBackgroundColor:'#221809',
+        pointBorderColor:'#bfa15a',
+        pointBorderWidth:1.5,
+        pointRadius:4,
+        fill:true,tension:.3
+      }]
+    },
+    options:{
+      responsive:true,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          callbacks:{label:c=>(c.parsed.y<0?'-':'')+'€ '+fmt(Math.abs(c.parsed.y))},
+          backgroundColor:'#0e0a04',titleColor:'#f4ecd8',
+          bodyColor:'#ddcfa8',borderColor:'#9a7e3a',borderWidth:1
+        }
+      },
+      scales:{
+        x:{ticks:{color:'#6b5638',font:{family:"'EB Garamond',serif",size:12}},grid:{color:'rgba(191,161,90,.08)'}},
+        y:{ticks:{color:'#6b5638',font:{family:"'EB Garamond',serif",size:12},
+            callback:v=>(v<0?'-':'')+'€'+fmt(Math.abs(v))},
+           grid:{color:'rgba(191,161,90,.08)'}}
+      }
+    }
+  });
+}
+
+// ── UTILS ────────────────────────────────────
+function fmt(v){
+  return Number(v).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+function defaultSalaryDate(){
+  const n = new Date();
+  // last day of current month
+  const last = new Date(n.getFullYear(), n.getMonth()+1, 0);
+  return last.toISOString().split('T')[0];
+}
+
+// ── INIT ─────────────────────────────────────
+function init(){
+  load();
+
+  // date input min = today
+  const todayIso = new Date().toISOString().split('T')[0];
+  document.getElementById('data-stip').min = todayIso;
+
+  // restore or default
+  if(S.t1.c)  document.getElementById('cifra').value     = S.t1.c;
+  if(S.t1.ds) document.getElementById('data-stip').value = S.t1.ds;
+  else        document.getElementById('data-stip').value = defaultSalaryDate();
+
+  if(S.t2.si) document.getElementById('s-inizio').value  = S.t2.si;
+
+  // default tab2 month/year
+  const now = new Date();
+  document.getElementById('n-anno').value = now.getFullYear();
+  document.getElementById('n-mese').value = MM_LONG[now.getMonth()];
+
+  // auto-save inputs
+  document.getElementById('cifra').addEventListener('input',()=>{S.t1.c=document.getElementById('cifra').value;save();});
+  document.getElementById('data-stip').addEventListener('change',()=>{S.t1.ds=document.getElementById('data-stip').value;save();});
+
+  // enter keys
+  document.getElementById('cifra').addEventListener('keydown',e=>{if(e.key==='Enter')calcola();});
+  document.getElementById('data-stip').addEventListener('keydown',e=>{if(e.key==='Enter')calcola();});
+  document.getElementById('n-imp').addEventListener('keydown',e=>{if(e.key==='Enter')addVoce();});
+  document.getElementById('s-inizio').addEventListener('keydown',e=>{if(e.key==='Enter')setSaldo();});
+
+  // restore calc
+  if(S.t1.c && S.t1.ds) calcola();
+
+  // ledger
+  renderLedger();
+
+  // clock
+  tickClock();
+  setInterval(tickClock, 1000);
+}
+
+init();
+</script>
+</body>
+</html>

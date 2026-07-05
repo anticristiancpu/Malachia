@@ -1,0 +1,25 @@
+manifestVersion: 1.2.1
+id: anticristiancpu-malachia
+category: Media
+name: Malachia
+version: "v1.0.0"
+tagline: "Bibliotheca privata — il catalogo della tua libreria personale"
+icon: https://raw.githubusercontent.com/anticristiancpu/Malachia/HEAD/icon.svg
+description: >-
+  Malachia è un catalogo privato per la tua biblioteca personale. Gestisci libri,
+  autori, generi, scaffali, prestiti, wishlist e note, con copertine e sfondi
+  personalizzati, statistiche della collezione e importazione da CSV.
+
+
+  Backend Express + SQLite, frontend React. Tutti i dati restano sul tuo server:
+  database e immagini sono salvati nella cartella dati dell'app.
+developer: anticristiancpu
+website: https://github.com/anticristiancpu/Malachia
+dependencies: []
+repo: https://github.com/anticristiancpu/Malachia
+support: https://github.com/anticristiancpu/Malachia/issues
+port: 8099
+gallery: []
+path: ""
+defaultUsername: ""
+defaultPassword: ""

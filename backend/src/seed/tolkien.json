@@ -1,0 +1,53 @@
+{
+  "author": {
+    "name": "J.R.R. Tolkien",
+    "full_name": "John Ronald Reuel Tolkien",
+    "birth_date": "1892-01-03",
+    "death_date": "1973-09-02",
+    "nationality": "britannico",
+    "biography": "John Ronald Reuel Tolkien (1892–1973), filologo, scrittore e poeta britannico. Professore di lingue anglosassoni a Oxford. Autore de Lo Hobbit, Il Signore degli Anelli e Il Silmarillion, padre della narrativa fantasy moderna. Creò lingue artificiali complete (quenya, sindarin) e una mitologia originale per la Terra di Mezzo.",
+    "alternate_names": ["Tolkien", "JRRT"]
+  },
+  "works": [
+    { "title": "Lo Hobbit", "original_title": "The Hobbit", "year": 1937, "isbn13": "9788845292422", "series_name": "Terra di Mezzo", "series_volume": 0, "genre": "Fantasy", "pages": 372, "tags": ["fantasy", "avventura", "tolkien"] },
+    { "title": "La Compagnia dell'Anello", "original_title": "The Fellowship of the Ring", "year": 1954, "isbn13": "9788845292439", "series_name": "Il Signore degli Anelli", "series_volume": 1, "genre": "Fantasy", "pages": 480, "tags": ["fantasy", "tolkien", "anello"] },
+    { "title": "Le Due Torri", "original_title": "The Two Towers", "year": 1954, "isbn13": "9788845292446", "series_name": "Il Signore degli Anelli", "series_volume": 2, "genre": "Fantasy", "pages": 448, "tags": ["fantasy", "tolkien", "anello"] },
+    { "title": "Il Ritorno del Re", "original_title": "The Return of the King", "year": 1955, "isbn13": "9788845292453", "series_name": "Il Signore degli Anelli", "series_volume": 3, "genre": "Fantasy", "pages": 544, "tags": ["fantasy", "tolkien", "anello"] },
+    { "title": "Il Silmarillion", "original_title": "The Silmarillion", "year": 1977, "isbn13": "9788845293382", "series_name": "Terra di Mezzo", "series_volume": null, "genre": "Fantasy", "pages": 411, "tags": ["fantasy", "tolkien", "mitologia"] },
+    { "title": "Racconti Incompiuti", "original_title": "Unfinished Tales", "year": 1980, "isbn13": "9788845294594", "genre": "Fantasy", "pages": 556, "tags": ["fantasy", "tolkien"] },
+    { "title": "I Figli di Húrin", "original_title": "The Children of Húrin", "year": 2007, "isbn13": "9788845262302", "genre": "Fantasy", "pages": 360, "tags": ["fantasy", "tolkien"] },
+    { "title": "Beren e Lúthien", "original_title": "Beren and Lúthien", "year": 2017, "isbn13": "9788845281433", "genre": "Fantasy", "pages": 288, "tags": ["fantasy", "tolkien"] },
+    { "title": "La Caduta di Gondolin", "original_title": "The Fall of Gondolin", "year": 2018, "isbn13": "9788845283277", "genre": "Fantasy", "pages": 304, "tags": ["fantasy", "tolkien"] },
+    { "title": "Il Libro dei Racconti Perduti I", "original_title": "The Book of Lost Tales Part One", "year": 1983, "series_name": "La Storia della Terra di Mezzo", "series_volume": 1, "genre": "Fantasy", "pages": 297, "tags": ["tolkien", "incompiuto"] },
+    { "title": "Il Libro dei Racconti Perduti II", "original_title": "The Book of Lost Tales Part Two", "year": 1984, "series_name": "La Storia della Terra di Mezzo", "series_volume": 2, "genre": "Fantasy", "pages": 385, "tags": ["tolkien", "incompiuto"] },
+    { "title": "I Lai del Beleriand", "original_title": "The Lays of Beleriand", "year": 1985, "series_name": "La Storia della Terra di Mezzo", "series_volume": 3, "genre": "Poesia", "pages": 393, "tags": ["tolkien", "poesia"] },
+    { "title": "La Formazione della Terra di Mezzo", "original_title": "The Shaping of Middle-earth", "year": 1986, "series_name": "La Storia della Terra di Mezzo", "series_volume": 4, "genre": "Fantasy", "pages": 380, "tags": ["tolkien", "incompiuto"] },
+    { "title": "La Strada Perduta", "original_title": "The Lost Road", "year": 1987, "series_name": "La Storia della Terra di Mezzo", "series_volume": 5, "genre": "Fantasy", "pages": 456, "tags": ["tolkien", "incompiuto"] },
+    { "title": "Il Ritorno dell'Ombra", "original_title": "The Return of the Shadow", "year": 1988, "series_name": "La Storia della Terra di Mezzo", "series_volume": 6, "genre": "Fantasy", "pages": 497, "tags": ["tolkien", "incompiuto"] },
+    { "title": "Il Tradimento di Isengard", "original_title": "The Treason of Isengard", "year": 1989, "series_name": "La Storia della Terra di Mezzo", "series_volume": 7, "genre": "Fantasy", "pages": 536, "tags": ["tolkien", "incompiuto"] },
+    { "title": "La Guerra dell'Anello", "original_title": "The War of the Ring", "year": 1990, "series_name": "La Storia della Terra di Mezzo", "series_volume": 8, "genre": "Fantasy", "pages": 481, "tags": ["tolkien", "incompiuto"] },
+    { "title": "Sauron Sconfitto", "original_title": "Sauron Defeated", "year": 1992, "series_name": "La Storia della Terra di Mezzo", "series_volume": 9, "genre": "Fantasy", "pages": 481, "tags": ["tolkien", "incompiuto"] },
+    { "title": "L'Anello di Morgoth", "original_title": "Morgoth's Ring", "year": 1993, "series_name": "La Storia della Terra di Mezzo", "series_volume": 10, "genre": "Fantasy", "pages": 504, "tags": ["tolkien", "incompiuto"] },
+    { "title": "La Guerra dei Gioielli", "original_title": "The War of the Jewels", "year": 1994, "series_name": "La Storia della Terra di Mezzo", "series_volume": 11, "genre": "Fantasy", "pages": 481, "tags": ["tolkien", "incompiuto"] },
+    { "title": "I Popoli della Terra di Mezzo", "original_title": "The Peoples of Middle-earth", "year": 1996, "series_name": "La Storia della Terra di Mezzo", "series_volume": 12, "genre": "Fantasy", "pages": 506, "tags": ["tolkien", "incompiuto"] },
+    { "title": "La Natura della Terra di Mezzo", "original_title": "The Nature of Middle-earth", "year": 2021, "genre": "Fantasy", "pages": 464, "tags": ["tolkien", "incompiuto"] },
+    { "title": "Le Lettere di Tolkien", "original_title": "The Letters of J.R.R. Tolkien", "year": 1981, "genre": "Epistolario", "pages": 502, "tags": ["tolkien", "lettere"] },
+    { "title": "Albero e Foglia", "original_title": "Tree and Leaf", "year": 1964, "genre": "Saggistica", "pages": 130, "tags": ["tolkien", "saggio", "fiabe"] },
+    { "title": "Farmer Giles di Ham", "original_title": "Farmer Giles of Ham", "year": 1949, "genre": "Fantasy", "pages": 84, "tags": ["tolkien", "racconto"] },
+    { "title": "Il Fabbro di Wootton Major", "original_title": "Smith of Wootton Major", "year": 1967, "genre": "Fantasy", "pages": 62, "tags": ["tolkien", "racconto"] },
+    { "title": "Roverandom", "original_title": "Roverandom", "year": 1998, "genre": "Fantasy", "pages": 118, "tags": ["tolkien", "racconto"] },
+    { "title": "Le Lettere di Babbo Natale", "original_title": "Letters from Father Christmas", "year": 1976, "genre": "Bambini", "pages": 96, "tags": ["tolkien", "bambini"] },
+    { "title": "Mister Bliss", "original_title": "Mr. Bliss", "year": 1982, "genre": "Bambini", "pages": 112, "tags": ["tolkien", "bambini"] },
+    { "title": "La Leggenda di Sigurd e Gudrún", "original_title": "The Legend of Sigurd and Gudrún", "year": 2009, "genre": "Poesia", "pages": 392, "tags": ["tolkien", "poesia", "norreno"] },
+    { "title": "La Caduta di Artù", "original_title": "The Fall of Arthur", "year": 2013, "genre": "Poesia", "pages": 224, "tags": ["tolkien", "poesia", "arturiano"] },
+    { "title": "Beowulf: Una Traduzione e Commento", "original_title": "Beowulf: A Translation and Commentary", "year": 2014, "genre": "Filologia", "pages": 448, "tags": ["tolkien", "filologia", "beowulf"] },
+    { "title": "La Storia di Kullervo", "original_title": "The Story of Kullervo", "year": 2015, "genre": "Filologia", "pages": 196, "tags": ["tolkien", "finlandese"] },
+    { "title": "Il Lai di Aotrou e Itroun", "original_title": "The Lay of Aotrou and Itroun", "year": 2016, "genre": "Poesia", "pages": 128, "tags": ["tolkien", "poesia", "bretone"] },
+    { "title": "Tolkien sulle Fiabe", "original_title": "On Fairy-Stories", "year": 1947, "genre": "Saggistica", "pages": 96, "tags": ["tolkien", "saggio", "fiabe"] }
+  ],
+  "collection": {
+    "name": "Tolkieniana",
+    "subtitle": "Opera omnia di J.R.R. Tolkien",
+    "description": "Raccolta completa delle opere di John Ronald Reuel Tolkien in tutte le edizioni e lingue principali. Include romanzi, racconti, poesie, saggi, filologia, epistolario e le opere postume curate dal figlio Christopher."
+  }
+}
