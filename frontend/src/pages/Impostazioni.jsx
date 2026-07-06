@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useContext, useCallback } from 'react';
-import { settings as settingsApi, authors as authorsApi } from '../api/index.js';
+import { settings as settingsApi, authors as authorsApi, books as booksApi } from '../api/index.js';
 import { useToast } from '../components/Toast.jsx';
 import {
   applyGold, applyVermilion, applyOverlay, extractAccentFromImage,
@@ -429,6 +429,8 @@ export default function Impostazioni() {
   const [loading,      setLoading]      = useState(true);
   const [cleaning,     setCleaning]     = useState(false);
   const [orphansCount, setOrphansCount] = useState(null);
+  const [coversFixing, setCoversFixing] = useState(false);
+  const [coversResult, setCoversResult] = useState(null);
 
   const loadBackgrounds = useCallback(() => {
     settingsApi.listBackgrounds().then(setBackgrounds).catch(() => {});
@@ -642,6 +644,17 @@ export default function Impostazioni() {
       setOrphansCount(0);
     } catch { toast('Errore durante la pulizia', 'error'); }
     setCleaning(false);
+  }
+
+  async function fixMissingCovers() {
+    setCoversFixing(true);
+    try {
+      const r = await booksApi.downloadMissingCovers();
+      setCoversResult(r);
+      if (r.total === 0) toast('Nessuna copertina da scaricare', 'success');
+      else toast(`${r.downloaded} copertine scaricate${r.failed ? ` · ${r.failed} non riuscite` : ''}`, r.failed && !r.downloaded ? 'error' : 'success');
+    } catch { toast('Errore durante il download delle copertine', 'error'); }
+    setCoversFixing(false);
   }
 
   if (loading) return (
@@ -862,6 +875,29 @@ export default function Impostazioni() {
                 <button className="m-btn m-btn-ghost" style={{ flexShrink: 0, marginLeft: 14 }}
                   onClick={cleanOrphans} disabled={cleaning || orphansCount === 0}>
                   {cleaning ? '…' : '✕ rimuovi'}
+                </button>
+              </div>
+            </div>
+
+            <div style={{ border: '1px solid var(--cine-border)', marginTop: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 15px' }}>
+                <div style={{ flex: 1 }}>
+                  <div className="m-serif" style={{ fontSize: 14, fontWeight: 500 }}>Copertine mancanti</div>
+                  <div className="m-marginalia" style={{ fontSize: 12, marginTop: 2, lineHeight: 1.5 }}>
+                    Scarica in locale le copertine dei libri che hanno solo un link esterno,
+                    spesso non visibile nel browser. Può richiedere qualche istante.
+                  </div>
+                  {coversResult && (
+                    <div style={{ marginTop: 6, fontSize: 12, color: coversResult.failed > 0 ? 'var(--m-terracotta)' : 'var(--m-ink-muted)', fontFamily: "'EB Garamond', serif" }}>
+                      {coversResult.total === 0
+                        ? '✓ Nessuna copertina da scaricare'
+                        : `✓ ${coversResult.downloaded} scaricate${coversResult.failed > 0 ? ` · ${coversResult.failed} non riuscite` : ''} (su ${coversResult.total})`}
+                    </div>
+                  )}
+                </div>
+                <button className="m-btn m-btn-ghost" style={{ flexShrink: 0, marginLeft: 14 }}
+                  onClick={fixMissingCovers} disabled={coversFixing}>
+                  {coversFixing ? '…' : '⇓ scarica'}
                 </button>
               </div>
             </div>

@@ -15,6 +15,7 @@ export const books = {
     return api.post(`/books/${id}/cover`, fd).then(r => r.data);
   },
   shelves: (id) => api.get(`/books/${id}/shelves`).then(r => r.data),
+  downloadMissingCovers: () => api.post('/books/covers/download-missing').then(r => r.data),
 };
 
 export const authors = {

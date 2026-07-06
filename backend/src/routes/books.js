@@ -4,6 +4,7 @@ const { getDb } = require('../db');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
+const axios = require('axios');
 
 const UPLOADS_DIR = path.join(__dirname, '../../../uploads/covers');
 
@@ -367,6 +368,54 @@ router.post('/:id/cover', (req, res) => {
       .run(url, req.params.id);
     res.json({ url });
   });
+});
+
+// POST /api/books/covers/download-missing — scarica in locale le copertine che
+// hanno solo un URL esterno. Il browser spesso non le mostra (http/hotlink/mixed
+// content), ma il server può scaricarle senza quei limiti e servirle in locale.
+router.post('/covers/download-missing', async (req, res) => {
+  const db = getDb();
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  const books = db.prepare(`
+    SELECT id, cover_url FROM books
+    WHERE (cover_local IS NULL OR cover_local = '')
+      AND cover_url IS NOT NULL AND cover_url != ''
+      AND cover_url LIKE 'http%'
+  `).all();
+
+  const upd = db.prepare("UPDATE books SET cover_local = ?, updated_at = datetime('now') WHERE id = ?");
+  let downloaded = 0, failed = 0;
+  const errors = [];
+
+  for (const b of books) {
+    try {
+      const resp = await axios.get(b.cover_url, {
+        responseType: 'arraybuffer',
+        timeout: 12000,
+        maxRedirects: 5,
+        maxContentLength: 20 * 1024 * 1024,
+        headers: { 'User-Agent': 'Mozilla/5.0 (Malachia cover fetcher)' },
+        validateStatus: s => s >= 200 && s < 300,
+      });
+      const ct = String(resp.headers['content-type'] || '').toLowerCase();
+      if (!ct.startsWith('image/')) throw new Error(`risposta non-immagine (${ct || 'sconosciuto'})`);
+      const ext = ct.includes('png')  ? '.png'
+                : ct.includes('webp') ? '.webp'
+                : ct.includes('gif')  ? '.gif'
+                : ct.includes('svg')  ? '.svg'
+                : '.jpg';
+      const filename = `${b.id}${ext}`;
+      fs.writeFileSync(path.join(UPLOADS_DIR, filename), Buffer.from(resp.data));
+      upd.run(`/uploads/covers/${filename}`, b.id);
+      downloaded++;
+    } catch (e) {
+      failed++;
+      if (errors.length < 15) errors.push({ id: b.id, url: b.cover_url, error: e.message });
+    }
+    await new Promise(r => setTimeout(r, 120)); // piccola pausa anti-rate-limit
+  }
+
+  res.json({ total: books.length, downloaded, failed, errors });
 });
 
 function updateFts(db, bookId) {
