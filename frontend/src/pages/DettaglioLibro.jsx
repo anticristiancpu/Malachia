@@ -1119,6 +1119,9 @@ export default function DettaglioLibro() {
                       try {
                         const result = await booksApi.uploadCover(id, file);
                         setBook(b => ({ ...b, cover_local: result.url }));
+                        // Allinea anche lo stato del form: senza questo, al SALVA
+                        // verrebbe rimandato il vecchio cover_local (vuoto) sovrascrivendo l'upload.
+                        setEditData(d => ({ ...d, cover_local: result.url }));
                         toast('Copertina caricata', 'success');
                       } catch { toast('Errore caricamento copertina', 'error'); }
                     }}/>
