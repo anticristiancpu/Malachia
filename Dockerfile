@@ -20,7 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
 COPY backend/package*.json ./
-RUN npm ci --omit=dev
+# npm install (non ci) così risolve eventuali dipendenze nuove non ancora nel lockfile
+RUN npm install --omit=dev
 
 # ============================================================
 # Stage 3 — Runtime

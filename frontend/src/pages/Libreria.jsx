@@ -795,6 +795,7 @@ function EditBookModal({ book, onSave, onClose }) {
     setSaving(true);
     try {
       const { authors_str, authors: _authors, author_names, ...bookFields } = editData;
+      if (bookFields.cover_local) bookFields.cover_local = String(bookFields.cover_local).split('?')[0];
       const names = (authors_str || '').split(',').map(s => s.trim()).filter(Boolean);
       const authorsPayload = [];
       for (const name of names) {
@@ -940,7 +941,7 @@ function EditBookModal({ book, onSave, onClose }) {
                     if (!file) return;
                     try {
                       const result = await booksApi.uploadCover(book.id, file);
-                      set('cover_local', result.url);
+                      set('cover_local', `${result.url}?t=${Date.now()}`);
                       toast('Copertina caricata', 'success');
                     } catch { toast('Errore caricamento copertina', 'error'); }
                   }}/>
@@ -975,6 +976,9 @@ function EditBookModal({ book, onSave, onClose }) {
 /* ── Module-level cache per scroll restoration ────────────────────────────────── */
 let _libBooks  = null;
 let _libScroll = 0;
+// Cache stale-while-revalidate: chiave = combinazione filtri, valore = { books, total }.
+// Persiste tra le navigazioni, così tornare in Libreria è istantaneo.
+const _libCache = new Map();
 
 /* ════════════════════════════════════════════════════════════════════════════ */
 export default function Libreria() {
@@ -1080,9 +1084,8 @@ export default function Libreria() {
   }, [fetchLibTotal]);
 
   useLayoutEffect(() => {
-    _libBooks  = null;
-    _libScroll = 0;
     const scroll = initialScrollRef.current;
+    _libScroll = 0;
     if (scroll <= 0) return;
     const el = document.querySelector('.cine-main');
     if (el) el.scrollTop = scroll;
@@ -1098,9 +1101,13 @@ export default function Libreria() {
   }, [navigate, books, status, sort, filterFormat, filterLang]);
 
   const load = useCallback(() => {
-    setLoading(true);
     const dir       = (sort === 'title' || sort === 'author') ? 'asc' : 'desc';
     const isNoValue = status === 'no_value';
+    const key = JSON.stringify({ status, sort, filterFormat, filterLang });
+    // Se abbiamo già questi risultati, mostrali subito (niente spinner) e aggiorna in background.
+    const cached = _libCache.get(key);
+    if (cached) { setBooks(cached.books); setTotal(cached.total); setLoading(false); }
+    else setLoading(true);
     booksApi.list({
       status:          (!isNoValue && status) ? status : undefined,
       no_market_value: isNoValue ? '1' : undefined,
@@ -1108,7 +1115,10 @@ export default function Libreria() {
       format:   filterFormat || undefined,
       language: filterLang   || undefined,
     })
-      .then(r => { setBooks(r.books); setTotal(r.total); setLoading(false); })
+      .then(r => {
+        _libCache.set(key, { books: r.books, total: r.total });
+        setBooks(r.books); setTotal(r.total); setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, [status, sort, filterFormat, filterLang]);
 
@@ -1154,6 +1164,7 @@ export default function Libreria() {
       const fresh = await booksApi.get(book.id);
       setBooks(prev => prev.map(b => b.id === book.id ? fresh : b));
     } catch {}
+    _libCache.clear(); // i dati in cache non sono più aggiornati
     setEditBook(null);
     if (saved) {
       toast(`"${book.title}" aggiornato`, 'success');
@@ -1167,6 +1178,7 @@ export default function Libreria() {
       setBooks(prev => prev.filter(b => b.id !== book.id));
       setTotal(t => Math.max(0, t - 1));
       setTotalAll(t => Math.max(0, t - 1));
+      _libCache.clear(); // i dati in cache non sono più aggiornati
       toast(`"${book.title}" eliminato`, 'success');
       window.dispatchEvent(new CustomEvent('malachia:stats-changed'));
     } catch { toast('Errore durante l\'eliminazione', 'error'); }

@@ -359,6 +359,7 @@ export default function DettaglioLibro() {
     let saved = false;
     try {
       const { authors_str, author_name_temp, authors: _authors, ...bookFields } = editData;
+      if (bookFields.cover_local) bookFields.cover_local = String(bookFields.cover_local).split('?')[0];
       const namesStr = authors_str ?? author_name_temp ?? '';
       const names    = namesStr.split(',').map(s => s.trim()).filter(Boolean);
       const authorsPayload = [];
@@ -1118,10 +1119,13 @@ export default function DettaglioLibro() {
                       if (!file) return;
                       try {
                         const result = await booksApi.uploadCover(id, file);
-                        setBook(b => ({ ...b, cover_local: result.url }));
-                        // Allinea anche lo stato del form: senza questo, al SALVA
-                        // verrebbe rimandato il vecchio cover_local (vuoto) sovrascrivendo l'upload.
-                        setEditData(d => ({ ...d, cover_local: result.url }));
+                        // ?t= forza il browser a ricaricare subito l'immagine (il nome file
+                        // resta uguale, quindi senza questo mostrerebbe la versione in cache).
+                        const busted = `${result.url}?t=${Date.now()}`;
+                        setBook(b => ({ ...b, cover_local: busted }));
+                        // Allinea anche lo stato del form, altrimenti al SALVA verrebbe
+                        // rimandato il vecchio cover_local sovrascrivendo l'upload.
+                        setEditData(d => ({ ...d, cover_local: busted }));
                         toast('Copertina caricata', 'success');
                       } catch { toast('Errore caricamento copertina', 'error'); }
                     }}/>

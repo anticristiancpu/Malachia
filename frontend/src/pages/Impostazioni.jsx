@@ -475,11 +475,13 @@ export default function Impostazioni() {
     } catch { toast('Errore durante l\'eliminazione', 'error'); }
   }
 
-  /* ── Upload nuovo sfondo ─── */
-  function handleBgChange(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  /* ── Upload nuovo/i sfondo/i (supporta selezione multipla) ─── */
+  async function handleBgChange(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setBgUploading(true);
 
+    // Anteprima + accento adattivo dal primo file
     const reader = new FileReader();
     reader.onload = (ev) => {
       const dataUrl = ev.target.result;
@@ -490,24 +492,31 @@ export default function Impostazioni() {
         });
       }
     };
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(files[0]);
 
-    setBgUploading(true);
-    settingsApi.uploadBackground(file)
-      .then(result => {
+    let lastUrl = null, ok = 0;
+    for (const file of files) {
+      try {
+        const result = await settingsApi.uploadBackground(file);
         if (result?.url) {
-          setBgImageUrl(result.url);
-          setActiveBgUrl(result.url);
-          try { localStorage.removeItem('malachia_bg'); } catch {}
+          lastUrl = result.url; ok++;
+          // Comparsa immediata nella galleria, senza attendere il reload
+          setBackgrounds(prev => prev.some(b => b.url === result.url)
+            ? prev
+            : [{ filename: result.filename, url: result.url, mtime: Date.now() }, ...prev]);
         }
-        loadBackgrounds();
-        toast('Sfondo aggiunto alla galleria', 'success');
-      })
-      .catch(() => toast('Sfondo impostato (solo locale)', 'success'))
-      .finally(() => {
-        setBgUploading(false);
-        if (bgInputRef.current) bgInputRef.current.value = '';
-      });
+      } catch { /* prosegui con gli altri file */ }
+    }
+
+    if (lastUrl) {
+      setBgImageUrl(lastUrl);
+      setActiveBgUrl(lastUrl);
+      try { localStorage.removeItem('malachia_bg'); } catch {}
+    }
+    loadBackgrounds(); // riallinea con il server
+    setBgUploading(false);
+    if (bgInputRef.current) bgInputRef.current.value = '';
+    toast(ok > 1 ? `${ok} sfondi aggiunti` : ok === 1 ? 'Sfondo aggiunto alla galleria' : 'Errore nel caricamento', ok ? 'success' : 'error');
   }
 
   /* ── Slideshow presets ─── */
@@ -673,7 +682,7 @@ export default function Impostazioni() {
       </div>
 
       {/* Hidden bg input */}
-      <input ref={bgInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleBgChange}/>
+      <input ref={bgInputRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={handleBgChange}/>
 
       {/* ── Two-column grid ── */}
       <div style={{

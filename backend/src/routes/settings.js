@@ -36,6 +36,7 @@ router.put('/', (req, res) => {
 
 // GET /api/settings/backgrounds — lista tutti gli sfondi caricati
 router.get('/backgrounds', (req, res) => {
+  res.set('Cache-Control', 'no-store'); // la lista cambia a ogni upload/eliminazione
   ensureBgDir();
   const EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif']);
   let files = [];
