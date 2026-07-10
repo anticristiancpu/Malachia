@@ -56,6 +56,8 @@ export default function BookCover({ book, title, author, cover_url, w = 110, h =
         <img
           src={imgUrl}
           alt={resolvedTitle}
+          loading="lazy"
+          decoding="async"
           style={{
             width: '100%',
             height: '100%',

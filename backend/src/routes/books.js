@@ -9,29 +9,31 @@ const axios = require('axios');
 const UPLOADS_DIR = path.join(__dirname, '../../../uploads/covers');
 
 // Helper: arricchisce libro con autori
-function enrichBook(db, book) {
+function enrichBook(db, book, { full = true } = {}) {
   if (!book) return null;
   const authors = db.prepare(`
     SELECT a.*, ba.role, ba.display_order
     FROM authors a JOIN book_authors ba ON a.id = ba.author_id
     WHERE ba.book_id = ? ORDER BY ba.display_order
   `).all(book.id);
-  const readingHistory = db.prepare(
-    'SELECT * FROM reading_history WHERE book_id = ? ORDER BY date_start DESC'
-  ).all(book.id);
-  const loans = db.prepare(
-    'SELECT * FROM loans WHERE book_id = ? AND active = 1 ORDER BY loan_date DESC LIMIT 1'
-  ).get(book.id);
-  return {
+  const base = {
     ...book,
     tags: safeJson(book.tags, []),
     inscriptions: safeJson(book.inscriptions, []),
     cover_palette: safeJson(book.cover_palette, null),
     value_log: safeJson(book.value_log, []),
     authors,
-    reading_history: readingHistory,
-    active_loan: loans || null,
   };
+  // Nella lista/griglia non servono cronologia letture e prestiti attivi:
+  // saltarle elimina 2 query per libro (problema N+1) e accelera il caricamento.
+  if (!full) return base;
+  const readingHistory = db.prepare(
+    'SELECT * FROM reading_history WHERE book_id = ? ORDER BY date_start DESC'
+  ).all(book.id);
+  const loans = db.prepare(
+    'SELECT * FROM loans WHERE book_id = ? AND active = 1 ORDER BY loan_date DESC LIMIT 1'
+  ).get(book.id);
+  return { ...base, reading_history: readingHistory, active_loan: loans || null };
 }
 
 function safeJson(val, fallback) {
@@ -111,7 +113,7 @@ router.get('/', (req, res) => {
   `).get(...params.slice(0, -2)).n;
 
   const books = db.prepare(sql).all(...params);
-  const enriched = books.map(b => enrichBook(db, b));
+  const enriched = books.map(b => enrichBook(db, b, { full: false }));
 
   res.json({ books: enriched, total, page: Number(page), limit: Number(limit) });
 });
