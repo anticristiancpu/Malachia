@@ -23,6 +23,10 @@ anticristiancpu-malachia
 icon.svg
 UMBREL.md
 
+# Script di backup/ripristino lato host (non servono nell'immagine)
+backup.sh
+restore.sh
+
 # Materiale di design / documentazione non necessario al runtime
 References EDGEUI
 design_handoff_*
