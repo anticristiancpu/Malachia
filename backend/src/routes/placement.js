@@ -36,20 +36,38 @@ router.get('/tree', (req, res) => {
   res.json({ ...buildTree(), counts, totals: { placed, unplaced } });
 });
 
-// GET /api/placement/books?section=<id|unplaced>&search=&limit=&offset=
+// Ordinamenti ammessi (whitelist: finiscono in SQL)
+const SORTS = {
+  author:   "COALESCE(author_sort, '~')",
+  title:    'b.title',
+  year:     'b.year',
+  pages:    'b.pages',
+  added_at: 'b.added_at',
+  publisher:'b.publisher',
+};
+
+// GET /api/placement/books?section=<id|unplaced|all>&search=&status=&format=&language=&sort=&dir=
 router.get('/books', (req, res) => {
   const db = getDb();
-  const { section = 'unplaced', search = '', limit = 200, offset = 0 } = req.query;
+  const {
+    section = 'unplaced', search = '', status, format, language,
+    sort = 'author', dir = 'asc', limit = 500, offset = 0,
+  } = req.query;
 
   const where = ["b.status <> 'wishlist'"];
   const params = [];
   if (section === 'unplaced') {
     where.push("(b.placement_id IS NULL OR b.placement_id = '')");
+  } else if (section === 'placed') {
+    where.push("b.placement_id IS NOT NULL AND b.placement_id <> ''");
   } else if (section !== 'all') {
     if (!isValidSection(section)) return res.status(400).json({ error: 'Sezione non valida' });
     where.push('b.placement_id = ?');
     params.push(section);
   }
+  if (status)   { where.push('b.status = ?');   params.push(status); }
+  if (format)   { where.push('b.format = ?');   params.push(format); }
+  if (language) { where.push('b.language = ?'); params.push(language); }
   if (search.trim()) {
     where.push(`(b.title LIKE ? OR b.publisher LIKE ? OR EXISTS (
       SELECT 1 FROM authors a JOIN book_authors ba ON a.id = ba.author_id
@@ -61,8 +79,10 @@ router.get('/books', (req, res) => {
 
   const total = db.prepare(`SELECT COUNT(*) AS n FROM books b WHERE ${whereSql}`).get(...params).n;
 
-  // Ordine di scaffale: alfabetico per cognome dell'autore.
-  const orderBy = "COALESCE(author_sort, '~') ASC, b.year ASC, b.title ASC";
+  // Di norma l'ordine di scaffale: alfabetico per cognome dell'autore.
+  const col = SORTS[sort] || SORTS.author;
+  const way = String(dir).toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+  const orderBy = `${col} ${way}, b.year ASC, b.title ASC`;
 
   const books = db.prepare(`
     SELECT ${CARD_FIELDS} FROM books b
@@ -70,6 +90,16 @@ router.get('/books', (req, res) => {
   `).all(...params, Number(limit), Number(offset));
 
   res.json({ books, total, section });
+});
+
+// GET /api/placement/facets — valori disponibili per i filtri (solo quelli usati)
+router.get('/facets', (req, res) => {
+  const db = getDb();
+  const col = c => db.prepare(
+    `SELECT ${c} AS v, COUNT(*) AS n FROM books
+      WHERE status <> 'wishlist' AND ${c} IS NOT NULL AND ${c} <> ''
+      GROUP BY ${c} ORDER BY n DESC`).all();
+  res.json({ statuses: col('status'), formats: col('format'), languages: col('language') });
 });
 
 // PATCH /api/placement/books/:id — colloca (o rimuove la collocazione di) un libro

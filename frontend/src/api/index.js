@@ -110,6 +110,7 @@ export const prices = {
 export const placement = {
   tree:  ()       => api.get('/placement/tree').then(r => r.data),
   books: (params) => api.get('/placement/books', { params }).then(r => r.data),
+  facets: ()      => api.get('/placement/facets').then(r => r.data),
   set:   (id, placement_id) => api.patch(`/placement/books/${id}`, { placement_id }).then(r => r.data),
   bulk:  (ids, placement_id) => api.post('/placement/bulk', { ids, placement_id }).then(r => r.data),
 };

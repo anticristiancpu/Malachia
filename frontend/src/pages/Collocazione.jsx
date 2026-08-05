@@ -11,6 +11,11 @@ const cinzel = (size, tracking = '0.18em', color = 'var(--cine-cream)', weight =
 });
 const serif = { fontFamily: "'EB Garamond', Georgia, serif" };
 
+const STATUS_LABELS = { tbr: 'Da leggere', reading: 'In lettura', read: 'Letto', abandoned: 'Abbandonato' };
+const FORMAT_LABELS = { paperback: 'Brossura', hardcover: 'Cartonato', ebook: 'Ebook', audiobook: 'Audiolibro', comics: 'Fumetto' };
+const LANG_LABELS   = { it: 'Italiano', en: 'Inglese', fr: 'Francese', de: 'Tedesco', es: 'Spagnolo', pt: 'Portoghese', la: 'Latino', el: 'Greco', ru: 'Russo' };
+const SORT_LABELS   = { author: 'autore', title: 'titolo', year: 'anno', pages: 'pagine', publisher: 'editore', added_at: 'data aggiunta' };
+
 const PANEL_BG   = 'rgba(13,9,5,0.55)';
 const BORDER     = '1px solid var(--cine-border, rgba(216,180,106,0.22))';
 const HOVER_BG   = 'rgba(216,180,106,0.10)';
@@ -24,6 +29,26 @@ const Chevron = ({ open, s = 8 }) => (
     <path d="M2.5 1 L6 4 L2.5 7" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/>
   </svg>
 );
+
+/* ── Menu a tendina compatto per i filtri ─────────────────────────────────── */
+function Select({ value, onChange, options, placeholder, allowEmpty = true }) {
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      style={{
+        ...serif, fontSize: 12.5, padding: '3px 8px', cursor: 'pointer',
+        background: 'rgba(0,0,0,0.35)', border: BORDER, outline: 'none',
+        color: value && allowEmpty ? 'var(--cine-gold)' : 'rgba(232,220,192,0.72)',
+      }}
+    >
+      {allowEmpty && <option value="" style={{ background: '#14100a' }}>{placeholder}</option>}
+      {options.map(([v, label]) => (
+        <option key={v} value={v} style={{ background: '#14100a', color: '#e8dcc0' }}>{label}</option>
+      ))}
+    </select>
+  );
+}
 
 /* ── Card libro (trascinabile) ────────────────────────────────────────────── */
 function BookCard({ book, w, selected, onSelect, onContextMenu, onDragStart, onDragEnd, onOpen }) {
@@ -66,6 +91,51 @@ function BookCard({ book, w, selected, onSelect, onContextMenu, onDragStart, onD
           fontSize: 11, lineHeight: 1, fontWeight: 700,
         }}>✓</div>
       )}
+    </div>
+  );
+}
+
+/* ── Riga elenco (trascinabile come la card) ──────────────────────────────── */
+function BookRow({ book, selected, onSelect, onContextMenu, onDragStart, onDragEnd, onOpen, placementLabel }) {
+  const [hover, setHover] = useState(false);
+  const cell = { ...serif, fontSize: 12.5, color: 'rgba(232,220,192,0.72)', flexShrink: 0,
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+  return (
+    <div
+      draggable
+      onDragStart={e => onDragStart(e, book)}
+      onDragEnd={onDragEnd}
+      onClick={e => onSelect(book, e)}
+      onDoubleClick={() => onOpen(book.id)}
+      onContextMenu={e => onContextMenu(e, book)}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title={`${book.title}\n(doppio clic: apri · tasto destro: colloca)`}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12, padding: '5px 10px', cursor: 'grab',
+        background: selected ? 'rgba(216,180,106,0.16)' : hover ? 'rgba(216,180,106,0.06)' : 'transparent',
+        borderBottom: '1px solid rgba(216,180,106,0.10)',
+        borderLeft: selected ? '2px solid var(--cine-gold)' : '2px solid transparent',
+      }}
+    >
+      <div style={{ width: 26, flexShrink: 0 }}>
+        <BookCover book={book} w={26} h={38}/>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ ...serif, fontSize: 13.5, color: 'var(--cine-cream)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {book.title}
+        </div>
+        {book.author_names && (
+          <div style={{ ...serif, fontSize: 11.5, fontStyle: 'italic', color: 'rgba(232,220,192,0.52)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {book.author_names}
+          </div>
+        )}
+      </div>
+      <div style={{ ...cell, width: 150 }}>{book.publisher || ''}</div>
+      <div style={{ ...cell, width: 46, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{book.year || ''}</div>
+      <div style={{ ...cell, width: 210, color: book.placement_id ? 'var(--cine-gold)' : 'rgba(232,220,192,0.28)', fontStyle: book.placement_id ? 'normal' : 'italic' }}>
+        {placementLabel || 'da collocare'}
+      </div>
     </div>
   );
 }
@@ -267,6 +337,11 @@ export default function Collocazione() {
   const [dragging, setDragging] = useState(false);
   const [expanded, setExpanded] = useState(() => new Set(['trasversale']));
   const [cardW,    setCardW]    = useState(() => Number(localStorage.getItem('malachia-coll-zoom')) || 104);
+  const [view,     setView]     = useState(() => localStorage.getItem('malachia-coll-view') || 'grid');
+  const [facets,   setFacets]   = useState({ statuses: [], formats: [], languages: [] });
+  const [filters,  setFilters]  = useState({ status: '', format: '', language: '' });
+  const [sort,     setSort]     = useState('author');
+  const [dir,      setDir]      = useState('asc');
 
   const dragIdsRef = useRef([]);
 
@@ -279,13 +354,19 @@ export default function Collocazione() {
 
   const loadBooks = useCallback(() => {
     setLoading(true);
-    placementApi.books({ section, search: search.trim() || undefined, limit: 500 })
+    placementApi.books({
+      section, search: search.trim() || undefined, limit: 1000, sort, dir,
+      status:   filters.status   || undefined,
+      format:   filters.format   || undefined,
+      language: filters.language || undefined,
+    })
       .then(r => { setBooks(r.books || []); setTotal(r.total || 0); })
       .catch(() => toast('Errore nel caricamento dei volumi', 'error'))
       .finally(() => setLoading(false));
-  }, [section, search, toast]);
+  }, [section, search, sort, dir, filters, toast]);
 
   useEffect(() => { loadTree(); }, [loadTree]);
+  useEffect(() => { placementApi.facets().then(setFacets).catch(() => {}); }, []);
   useEffect(() => {
     const t = setTimeout(loadBooks, search ? 280 : 0); // debounce sulla ricerca
     return () => clearTimeout(t);
@@ -385,6 +466,8 @@ export default function Collocazione() {
   const viewLabel = useMemo(
     () => section === 'unplaced' ? 'Da collocare' : (labelOf(section) ?? section),
     [section, labelOf]);
+
+  const hasFilters = !!(filters.status || filters.format || filters.language || search.trim());
 
   const currentLabel = menu?.ids.length === 1 ? labelOf(menu.book.placement_id) : null;
 
@@ -508,8 +591,9 @@ export default function Collocazione() {
 
         {/* Griglia copertine */}
         <div style={{ flex: 1, minWidth: 0, border: BORDER, borderLeft: 'none', background: PANEL_BG, display: 'flex', flexDirection: 'column' }}>
+          {/* Riga 1: titolo, ricerca, vista, zoom */}
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 14, padding: '9px 14px',
+            display: 'flex', alignItems: 'center', gap: 12, padding: '9px 14px',
             borderBottom: BORDER, flexShrink: 0, flexWrap: 'wrap',
           }}>
             <span style={cinzel(11, '0.16em', 'var(--cine-cream)', 600)}>{viewLabel}</span>
@@ -519,34 +603,112 @@ export default function Collocazione() {
               value={search} onChange={e => setSearch(e.target.value)}
               placeholder="cerca titolo o autore…"
               style={{
-                ...serif, fontSize: 13, padding: '5px 10px', width: 210,
+                ...serif, fontSize: 13, padding: '5px 10px', width: 200,
                 background: 'rgba(0,0,0,0.3)', border: BORDER, color: 'var(--cine-cream)', outline: 'none',
               }}
             />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ fontSize: 11, color: 'rgba(232,220,192,0.38)' }}>⊟</span>
-              <input type="range" min={70} max={190} step={10} value={cardW}
-                onChange={e => onZoom(parseInt(e.target.value))}
-                style={{ width: 74, accentColor: 'var(--cine-gold)', cursor: 'pointer' }}/>
-              <span style={{ fontSize: 11, color: 'rgba(232,220,192,0.38)' }}>⊞</span>
+            {/* Griglia | Elenco */}
+            <div style={{ display: 'inline-flex', border: BORDER, flexShrink: 0 }}>
+              {[['grid', '⊞', 'Griglia'], ['list', '☰', 'Elenco']].map(([v, icon, title]) => (
+                <button key={v} title={title}
+                  onClick={() => { setView(v); localStorage.setItem('malachia-coll-view', v); }}
+                  style={{
+                    padding: '4px 10px', background: view === v ? 'rgba(216,180,106,0.18)' : 'transparent',
+                    border: 'none', cursor: 'pointer', fontSize: 13,
+                    color: view === v ? 'var(--cine-cream)' : 'rgba(232,220,192,0.55)',
+                  }}>{icon}</button>
+              ))}
             </div>
+            {view === 'grid' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ fontSize: 11, color: 'rgba(232,220,192,0.38)' }}>⊟</span>
+                <input type="range" min={70} max={190} step={10} value={cardW}
+                  onChange={e => onZoom(parseInt(e.target.value))}
+                  style={{ width: 70, accentColor: 'var(--cine-gold)', cursor: 'pointer' }}/>
+                <span style={{ fontSize: 11, color: 'rgba(232,220,192,0.38)' }}>⊞</span>
+              </div>
+            )}
           </div>
 
-          <div style={{ flex: 1, overflowY: 'auto', padding: 14, maxHeight: 'calc(100vh - 280px)' }}>
+          {/* Riga 2: filtri e ordinamento */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px',
+            borderBottom: BORDER, flexShrink: 0, flexWrap: 'wrap',
+            background: 'rgba(0,0,0,0.18)',
+          }}>
+            <span style={cinzel(9, '0.2em', 'rgba(232,220,192,0.42)')}>Filtri</span>
+            <Select value={filters.status} onChange={v => setFilters(f => ({ ...f, status: v }))}
+              placeholder="Ogni stato"
+              options={facets.statuses.map(s => [s.v, `${STATUS_LABELS[s.v] || s.v} (${s.n})`])}/>
+            <Select value={filters.format} onChange={v => setFilters(f => ({ ...f, format: v }))}
+              placeholder="Ogni formato"
+              options={facets.formats.map(s => [s.v, `${FORMAT_LABELS[s.v] || s.v} (${s.n})`])}/>
+            <Select value={filters.language} onChange={v => setFilters(f => ({ ...f, language: v }))}
+              placeholder="Ogni lingua"
+              options={facets.languages.map(s => [s.v, `${LANG_LABELS[s.v] || s.v} (${s.n})`])}/>
+            {(filters.status || filters.format || filters.language) && (
+              <button onClick={() => setFilters({ status: '', format: '', language: '' })}
+                style={{ ...serif, fontSize: 11, background: 'none', border: BORDER,
+                  color: 'var(--cine-gold)', cursor: 'pointer', padding: '3px 9px' }}>
+                ✕ azzera
+              </button>
+            )}
+            <div style={{ flex: 1 }}/>
+            <span style={cinzel(9, '0.2em', 'rgba(232,220,192,0.42)')}>Ordina</span>
+            <Select value={sort} onChange={setSort} allowEmpty={false}
+              options={Object.entries(SORT_LABELS)}/>
+            <button onClick={() => setDir(d => d === 'asc' ? 'desc' : 'asc')}
+              title={dir === 'asc' ? 'Crescente' : 'Decrescente'}
+              style={{ background: 'none', border: BORDER, color: 'var(--cine-gold)',
+                cursor: 'pointer', fontSize: 12, padding: '2px 8px' }}>
+              {dir === 'asc' ? '↑' : '↓'}
+            </button>
+          </div>
+
+          <div style={{ flex: 1, overflowY: 'auto', padding: view === 'grid' ? 14 : 0, maxHeight: 'calc(100vh - 320px)' }}>
             {loading ? (
               <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><div className="m-spinner"/></div>
             ) : books.length === 0 ? (
               <div style={{ ...serif, fontStyle: 'italic', color: 'rgba(232,220,192,0.42)', textAlign: 'center', padding: '60px 20px', fontSize: 14 }}>
-                {section === 'unplaced'
-                  ? 'Tutti i volumi sono stati collocati.'
-                  : search ? 'Nessun volume corrisponde alla ricerca.' : 'Sezione vuota — trascina qui i volumi da collocare.'}
+                {hasFilters
+                  ? 'Nessun volume corrisponde ai filtri.'
+                  : section === 'unplaced'
+                    ? 'Tutti i volumi sono stati collocati.'
+                    : 'Sezione vuota — trascina qui i volumi da collocare.'}
               </div>
-            ) : (
+            ) : view === 'grid' ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                 {books.map(b => (
                   <BookCard
                     key={b.id} book={b} w={cardW}
                     selected={selected.has(b.id)}
+                    onSelect={handleSelect}
+                    onContextMenu={handleContextMenu}
+                    onDragStart={handleDragStart}
+                    onDragEnd={() => setDragging(false)}
+                    onOpen={id => navigate(`/libro/${id}`)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div>
+                {/* Intestazione colonne */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '5px 10px',
+                  borderBottom: BORDER, position: 'sticky', top: 0, zIndex: 2,
+                  background: 'rgba(13,9,5,0.96)',
+                }}>
+                  <div style={{ width: 26, flexShrink: 0 }}/>
+                  <div style={{ flex: 1, ...cinzel(9, '0.18em', 'rgba(232,220,192,0.42)') }}>Titolo e autore</div>
+                  <div style={{ width: 150, ...cinzel(9, '0.18em', 'rgba(232,220,192,0.42)') }}>Editore</div>
+                  <div style={{ width: 46, ...cinzel(9, '0.18em', 'rgba(232,220,192,0.42)'), textAlign: 'right' }}>Anno</div>
+                  <div style={{ width: 210, ...cinzel(9, '0.18em', 'rgba(232,220,192,0.42)') }}>Collocazione</div>
+                </div>
+                {books.map(b => (
+                  <BookRow
+                    key={b.id} book={b}
+                    selected={selected.has(b.id)}
+                    placementLabel={labelOf(b.placement_id)}
                     onSelect={handleSelect}
                     onContextMenu={handleContextMenu}
                     onDragStart={handleDragStart}
