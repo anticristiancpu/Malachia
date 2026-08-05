@@ -24,6 +24,7 @@ import Editori           from './pages/Editori.jsx';
 import Impostazioni      from './pages/Impostazioni.jsx';
 import CollezioneTolkien from './pages/CollezioneTolkien.jsx';
 import Desiderata        from './pages/Desiderata.jsx';
+import Collocazione      from './pages/Collocazione.jsx';
 
 /* ── Motore slideshow ────────────────────────────────────────────────── */
 function SlideshowEngine() {
@@ -120,6 +121,7 @@ export default function App() {
               <Route path="/autori/:id"         element={<DettaglioAutore />} />
               <Route path="/editori"            element={<Editori />} />
               <Route path="/note"               element={<Note />} />
+              <Route path="/collocazione"       element={<Collocazione />} />
               <Route path="/scaffali"           element={<Scaffali />} />
               <Route path="/scaffali/:id"       element={<DettaglioScaffale />} />
               <Route path="/mappa"              element={<Mappa />} />

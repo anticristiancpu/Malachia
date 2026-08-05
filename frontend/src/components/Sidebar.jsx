@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { path: '/autori',     label: 'Autori',   icon: '✦', end: true },
   { path: '/editori',    label: 'Editori',  icon: '⊕', end: true },
   { path: '/scaffali',   label: 'Scaffali',   icon: '⊟' },
+  { path: '/collocazione', label: 'Collocazione', icon: '▤' },
   { path: '/desiderata', label: 'Desiderata', icon: '♡' },
   { path: '/note',       label: 'Note',       icon: '✎' },
   // { path: '/mappa',   label: 'Mappa',    icon: '⊡' },   // in arrivo
@@ -149,7 +150,7 @@ export default function Sidebar({ collapsed, onToggle, darkMode, onToggleDark })
       {/* Navigazione */}
       <div>
         <div className="m-eyebrow" style={{ marginBottom: 8 }}>Sezioni</div>
-        {NAV_ITEMS.slice(0, 9).map(item => (
+        {NAV_ITEMS.filter(i => i.path !== '/impostazioni').map(item => (
           <NavLink key={item.path} to={item.path} end={item.path === '/' || !!item.end}
             className={({ isActive }) => `m-nav-item${isActive ? ' active' : ''}`}
           >

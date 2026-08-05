@@ -107,6 +107,13 @@ export const prices = {
   search: (params) => api.get('/prices/search', { params }).then(r => r.data),
 };
 
+export const placement = {
+  tree:  ()       => api.get('/placement/tree').then(r => r.data),
+  books: (params) => api.get('/placement/books', { params }).then(r => r.data),
+  set:   (id, placement_id) => api.patch(`/placement/books/${id}`, { placement_id }).then(r => r.data),
+  bulk:  (ids, placement_id) => api.post('/placement/bulk', { ids, placement_id }).then(r => r.data),
+};
+
 export const settings = {
   get:    ()     => api.get('/settings').then(r => r.data),
   save:   (data) => api.put('/settings', data).then(r => r.data),

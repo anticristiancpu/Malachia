@@ -12,6 +12,7 @@ const TABS = [
     ],
   },
   { label: 'Scaffali',   path: '/scaffali' },
+  { label: 'Collocazione', path: '/collocazione' },
   { label: 'Desiderata', path: '/desiderata' },
   { label: 'Note',       path: '/note' },
   {
