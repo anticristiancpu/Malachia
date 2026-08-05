@@ -209,26 +209,27 @@ function PlacementMenu({ x, y, tree, counts, targetCount, currentPlacement, onPi
         )}
       </div>
 
-      {sectionLabel('Transito')}
-      <MenuEntry
-        label={tree.nuoviAcquisti.name}
-        count={counts[tree.nuoviAcquisti.id] || 0}
-        onClick={() => onPick(tree.nuoviAcquisti.id)}
-      />
-
       {sectionLabel('Grandi Ere')}
       {tree.eras.map(era => (
         <MenuEntry
           key={era.id} label={era.name} note={era.range} flipped={flipped}
           submenu={era.periods.map(p => (
             <MenuEntry
-              key={p.id} label={p.name} note={p.range} flipped={flipped}
-              submenu={p.sections.map(s => (
-                <MenuEntry
-                  key={s.id} label={s.name} count={counts[s.id] || 0}
-                  onClick={() => onPick(s.id)}
-                />
-              ))}
+              key={p.sectionId} label={p.name} note={p.range} flipped={flipped}
+              count={counts[p.sectionId] || 0}
+              // Cliccando il periodo si colloca lì; la disciplina si può scegliere dopo.
+              onClick={() => onPick(p.sectionId)}
+              submenu={
+                <>
+                  <div style={{ ...cinzel(9, '0.2em', 'rgba(232,220,192,0.42)'), padding: '8px 12px 4px' }}>
+                    Disciplina
+                  </div>
+                  {p.sections.map(s => (
+                    <MenuEntry key={s.id} label={s.name} count={counts[s.id] || 0}
+                      onClick={() => onPick(s.id)}/>
+                  ))}
+                </>
+              }
             />
           ))}
         />
@@ -264,7 +265,7 @@ export default function Collocazione() {
   const [selected, setSelected] = useState(() => new Set());
   const [menu,     setMenu]     = useState(null);
   const [dragging, setDragging] = useState(false);
-  const [expanded, setExpanded] = useState(() => new Set(['nuovi', 'trasversale']));
+  const [expanded, setExpanded] = useState(() => new Set(['trasversale']));
   const [cardW,    setCardW]    = useState(() => Number(localStorage.getItem('malachia-coll-zoom')) || 104);
 
   const dragIdsRef = useRef([]);
@@ -361,30 +362,31 @@ export default function Collocazione() {
 
   const onZoom = v => { setCardW(v); localStorage.setItem('malachia-coll-zoom', String(v)); };
 
+  /* Volumi di un sotto-periodo: quelli assegnati al periodo stesso più quelli
+     già scesi in una disciplina. */
+  const periodTotal = useCallback(p =>
+    (counts[p.sectionId] || 0) + p.sections.reduce((s, sec) => s + (counts[sec.id] || 0), 0),
+  [counts]);
+
   /* ── Etichetta della vista corrente ── */
-  const viewLabel = useMemo(() => {
-    if (!tree) return '';
-    if (section === 'unplaced') return 'Da collocare';
-    if (section === tree.nuoviAcquisti.id) return tree.nuoviAcquisti.name;
-    const [a, b, c] = section.split('/');
-    if (a === 'trasversale') return `Trasversale › ${tree.trasversale.find(t => t.id === section)?.name ?? ''}`;
+  /* Etichetta leggibile di una collocazione, con o senza disciplina. */
+  const labelOf = useCallback(id => {
+    if (!tree || !id) return null;
+    const [a, b, c] = id.split('/');
+    if (a === 'trasversale') return `Trasversale › ${tree.trasversale.find(t => t.id === id)?.name ?? ''}`;
     const era = tree.eras.find(e => e.id === a);
     const per = era?.periods.find(p => p.id === b);
+    if (!era || !per) return null;
+    if (!c) return `${era.name} › ${per.name}`;
     const dis = tree.disciplines.find(d => d.id === c);
-    return era && per && dis ? `${era.name} › ${per.name} › ${dis.name}` : section;
-  }, [section, tree]);
+    return dis ? `${era.name} › ${per.name} › ${dis.name}` : null;
+  }, [tree]);
 
-  const currentLabel = menu?.ids.length === 1 && menu.book.placement_id
-    ? (() => {
-        const [a, b, c] = menu.book.placement_id.split('/');
-        if (menu.book.placement_id === 'nuovi-acquisti') return tree?.nuoviAcquisti.name;
-        if (a === 'trasversale') return tree?.trasversale.find(t => t.id === menu.book.placement_id)?.name;
-        const era = tree?.eras.find(e => e.id === a);
-        const per = era?.periods.find(p => p.id === b);
-        const dis = tree?.disciplines.find(d => d.id === c);
-        return era && per && dis ? `${era.name} › ${per.name} › ${dis.name}` : null;
-      })()
-    : null;
+  const viewLabel = useMemo(
+    () => section === 'unplaced' ? 'Da collocare' : (labelOf(section) ?? section),
+    [section, labelOf]);
+
+  const currentLabel = menu?.ids.length === 1 ? labelOf(menu.book.placement_id) : null;
 
   if (!tree) {
     return (
@@ -446,20 +448,10 @@ export default function Collocazione() {
             onDrop={() => handleDrop(null)} dragActive={dragging}
           />
 
-          {/* Nuovi acquisti (bersaglio) */}
-          <TreeRow
-            label={tree.nuoviAcquisti.name} note="transito"
-            count={counts[tree.nuoviAcquisti.id] || 0} depth={0}
-            sectionId={tree.nuoviAcquisti.id} active={section === tree.nuoviAcquisti.id}
-            onActivate={() => setSection(tree.nuoviAcquisti.id)}
-            onDrop={handleDrop} dragActive={dragging}
-          />
-
-          {/* Grandi Ere */}
+          {/* Grandi Ere — periodi e discipline sono tutti bersagli di trascinamento */}
           {tree.eras.map(era => {
             const eraOpen = expanded.has(era.id);
-            const eraCount = era.periods.reduce((sum, p) =>
-              sum + p.sections.reduce((s, sec) => s + (counts[sec.id] || 0), 0), 0);
+            const eraCount = era.periods.reduce((sum, p) => sum + periodTotal(p), 0);
             return (
               <div key={era.id}>
                 <TreeRow
@@ -467,28 +459,25 @@ export default function Collocazione() {
                   open={eraOpen} hasChildren onToggle={() => toggleNode(era.id)}
                   dragActive={dragging}
                 />
-                {eraOpen && era.periods.map(p => {
-                  const pKey = `${era.id}/${p.id}`;
-                  const pOpen = expanded.has(pKey);
-                  const pCount = p.sections.reduce((s, sec) => s + (counts[sec.id] || 0), 0);
-                  return (
-                    <div key={pKey}>
+                {eraOpen && era.periods.map(p => (
+                  <div key={p.sectionId}>
+                    {/* Il sotto-periodo è collocabile di per sé: ci si può rilasciare sopra */}
+                    <TreeRow
+                      label={p.name} note={p.range} count={periodTotal(p)} depth={1}
+                      sectionId={p.sectionId} active={section === p.sectionId}
+                      onActivate={() => setSection(p.sectionId)}
+                      onDrop={handleDrop} dragActive={dragging}
+                    />
+                    {p.sections.map(sec => (
                       <TreeRow
-                        label={p.name} note={p.range} count={pCount} depth={1}
-                        open={pOpen} hasChildren onToggle={() => toggleNode(pKey)}
-                        dragActive={dragging}
+                        key={sec.id} label={sec.name} count={counts[sec.id] || 0} depth={2}
+                        sectionId={sec.id} active={section === sec.id}
+                        onActivate={() => setSection(sec.id)}
+                        onDrop={handleDrop} dragActive={dragging}
                       />
-                      {pOpen && p.sections.map(sec => (
-                        <TreeRow
-                          key={sec.id} label={sec.name} count={counts[sec.id] || 0} depth={2}
-                          sectionId={sec.id} active={section === sec.id}
-                          onActivate={() => setSection(sec.id)}
-                          onDrop={handleDrop} dragActive={dragging}
-                        />
-                      ))}
-                    </div>
-                  );
-                })}
+                    ))}
+                  </div>
+                ))}
               </div>
             );
           })}

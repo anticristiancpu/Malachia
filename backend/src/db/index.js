@@ -47,10 +47,12 @@ function runMigrations() {
     'ALTER TABLE books ADD COLUMN inventory_number TEXT',
     'ALTER TABLE books ADD COLUMN volumes_count INTEGER DEFAULT 1',
     'ALTER TABLE books ADD COLUMN copies_owned INTEGER DEFAULT 1',
-    // Sistema di collocazione: "<era>/<periodo>/<disciplina>", "trasversale/<voce>" o "nuovi-acquisti"
+    // Sistema di collocazione: "<era>/<periodo>[/<disciplina>]" o "trasversale/<voce>"
     'ALTER TABLE books ADD COLUMN placement_id TEXT',
     'ALTER TABLE books ADD COLUMN placement_at TEXT',
     'CREATE INDEX IF NOT EXISTS idx_books_placement ON books(placement_id)',
+    // "Nuovi acquisti" non fa più parte della collocazione: quei volumi tornano da collocare
+    "UPDATE books SET placement_id = NULL WHERE placement_id = 'nuovi-acquisti'",
   ];
   for (const m of migrations) {
     try { db.exec(m); } catch {}

@@ -61,10 +61,8 @@ router.get('/books', (req, res) => {
 
   const total = db.prepare(`SELECT COUNT(*) AS n FROM books b WHERE ${whereSql}`).get(...params).n;
 
-  // Nei "Nuovi acquisti" conta l'ordine di arrivo; altrove l'ordine di scaffale (autore).
-  const orderBy = section === 'nuovi-acquisti'
-    ? 'b.added_at DESC'
-    : "COALESCE(author_sort, '~') ASC, b.year ASC, b.title ASC";
+  // Ordine di scaffale: alfabetico per cognome dell'autore.
+  const orderBy = "COALESCE(author_sort, '~') ASC, b.year ASC, b.title ASC";
 
   const books = db.prepare(`
     SELECT ${CARD_FIELDS} FROM books b

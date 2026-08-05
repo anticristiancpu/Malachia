@@ -4,12 +4,15 @@
  * Quattro livelli: Grande Era › Sotto-periodo › Disciplina › Autore (alfabetico).
  * Il sotto-periodo è determinato dal periodo di cui l'opera TRATTA, non da quando
  * è stata scritta. Le opere che attraversano più Grandi Ere vanno nella sezione
- * trasversale; i libri appena arrivati sostano in "Nuovi acquisti".
+ * trasversale.
  *
  * ID canonico di una sezione:
+ *   "<era>/<periodo>"                es. "antichita/grecia"  (disciplina non ancora decisa)
  *   "<era>/<periodo>/<disciplina>"   es. "antichita/grecia/storia"
  *   "trasversale/<voce>"             es. "trasversale/riviste"
- *   "nuovi-acquisti"
+ *
+ * Il livello "<era>/<periodo>" è una collocazione valida: permette di assegnare
+ * un volume all'epoca giusta e rifinire la disciplina in un secondo momento.
  */
 
 // Le 7 discipline, nell'ordine di scaffalatura (Storia sempre per prima).
@@ -76,8 +79,6 @@ const TRASVERSALE = [
   { id: 'riviste',          name: 'Riviste e periodici',           note: 'ordinate per testata' },
 ];
 
-const NUOVI_ACQUISTI = { id: 'nuovi-acquisti', name: 'Nuovi acquisti', note: 'zona di transito, ordinata per data di acquisizione' };
-
 /** Albero completo delle sezioni, pronto per la UI. */
 function buildTree() {
   return {
@@ -86,6 +87,10 @@ function buildTree() {
       ...era,
       periods: era.periods.map(p => ({
         ...p,
+        // Il periodo è esso stesso una collocazione valida…
+        id: p.id,
+        sectionId: `${era.id}/${p.id}`,
+        // …e si articola nelle 7 discipline.
         sections: DISCIPLINES.map(d => ({
           id: `${era.id}/${p.id}/${d.id}`,
           discipline: d.id,
@@ -94,15 +99,15 @@ function buildTree() {
       })),
     })),
     trasversale: TRASVERSALE.map(t => ({ ...t, id: `trasversale/${t.id}` })),
-    nuoviAcquisti: NUOVI_ACQUISTI,
   };
 }
 
 /** Tutti gli ID di sezione validi. */
 function allSectionIds() {
-  const ids = [NUOVI_ACQUISTI.id];
+  const ids = [];
   for (const era of ERAS) {
     for (const p of era.periods) {
+      ids.push(`${era.id}/${p.id}`);
       for (const d of DISCIPLINES) ids.push(`${era.id}/${p.id}/${d.id}`);
     }
   }
@@ -116,7 +121,6 @@ function isValidSection(id) { return typeof id === 'string' && VALID.has(id); }
 /** Etichetta leggibile di una sezione, es. "Antichità › Grecia antica › Storia". */
 function labelFor(id) {
   if (!id) return null;
-  if (id === NUOVI_ACQUISTI.id) return NUOVI_ACQUISTI.name;
   const parts = id.split('/');
   if (parts[0] === 'trasversale') {
     const t = TRASVERSALE.find(x => x.id === parts[1]);
@@ -124,12 +128,13 @@ function labelFor(id) {
   }
   const era = ERAS.find(e => e.id === parts[0]);
   const per = era?.periods.find(p => p.id === parts[1]);
+  if (!era || !per) return null;
+  if (parts.length === 2) return `${era.name} › ${per.name}`;
   const dis = DISCIPLINES.find(d => d.id === parts[2]);
-  if (!era || !per || !dis) return null;
-  return `${era.name} › ${per.name} › ${dis.name}`;
+  return dis ? `${era.name} › ${per.name} › ${dis.name}` : null;
 }
 
 module.exports = {
-  DISCIPLINES, ERAS, TRASVERSALE, NUOVI_ACQUISTI,
+  DISCIPLINES, ERAS, TRASVERSALE,
   buildTree, allSectionIds, isValidSection, labelFor,
 };
