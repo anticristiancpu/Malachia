@@ -31,12 +31,31 @@ app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d' }));
 // dell'utente e il seme non viene più toccato.
 const SEED_DIR = path.join(__dirname, '../../seed');
 
+// Un catalogo è "da seminare" se il file non c'è, oppure se c'è ma è ancora
+// senza libri: è il caso di un'installazione appena avviata, che crea il
+// database vuoto prima che l'utente vi metta qualcosa dentro.
+function catalogoVuoto(dbPath) {
+  if (!fs.existsSync(dbPath)) return true;
+  try {
+    const Database = require('better-sqlite3');
+    const db = new Database(dbPath, { readonly: true });
+    let n = 0;
+    try { n = db.prepare('SELECT COUNT(*) AS c FROM books').get().c; } catch { n = 0; }
+    db.close();
+    return n === 0;
+  } catch {
+    return false; // illeggibile: nel dubbio non si tocca
+  }
+}
+
 function seminaSeVuoto(dbPath) {
   if (!fs.existsSync(SEED_DIR)) return;
   try {
     const semeDb = path.join(SEED_DIR, 'malachia-seed.db');
-    if (fs.existsSync(semeDb) && !fs.existsSync(dbPath)) {
+    if (fs.existsSync(semeDb) && catalogoVuoto(dbPath)) {
       fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+      // Gli eventuali giornali WAL appartengono al database che stiamo sostituendo
+      for (const suff of ['-wal', '-shm']) fs.rmSync(dbPath + suff, { force: true });
       fs.copyFileSync(semeDb, dbPath);
       console.log('  ✦ Catalogo iniziale installato');
     }
