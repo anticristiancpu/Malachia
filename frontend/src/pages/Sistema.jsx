@@ -19,8 +19,8 @@ const BORDER2 = '1px solid var(--cine-border-strong)';
 const PANEL   = 'rgba(20,14,7,0.55)';
 const GOLD    = 'var(--cine-gold)';
 const CREAM   = 'var(--cine-cream)';
-const DIM     = 'rgba(232,220,192,0.55)';
-const MUTE    = 'rgba(232,220,192,0.40)';
+const DIM     = 'rgba(232,220,192,0.70)';
+const MUTE    = 'rgba(232,220,192,0.52)';
 
 /* ── Le sette discipline, con le loro sottosezioni ────────────────────────── */
 const DISCIPLINE = [
@@ -155,10 +155,10 @@ function Tiers({ tiers, evidenzia }) {
       display: 'flex', flexDirection: 'column', gap: 5,
     }}>
       {tiers.map(t => (
-        <div key={t.name} style={{ display: 'flex', alignItems: 'baseline', gap: 7, fontSize: 11.5 }}>
-          <span style={{ width: 5, height: 1, background: 'var(--cine-gold-dim)', flex: 'none', transform: 'translateY(-3.5px)' }}/>
-          <span style={{ ...serif, color: 'rgba(232,220,192,0.72)' }}>{t.name}</span>
-          {t.note && <span style={{ ...serif, color: MUTE, fontSize: 10.5, fontStyle: 'italic' }}>{t.note}</span>}
+        <div key={t.name} style={{ display: 'flex', alignItems: 'baseline', gap: 7, fontSize: 13.5 }}>
+          <span style={{ width: 7, height: 1, background: 'var(--cine-gold-dim)', flex: 'none', transform: 'translateY(-4px)' }}/>
+          <span style={{ ...serif, color: 'rgba(232,220,192,0.84)' }}>{t.name}</span>
+          {t.note && <span style={{ ...serif, color: MUTE, fontSize: 12.5, fontStyle: 'italic' }}>{t.note}</span>}
         </div>
       ))}
     </div>
@@ -171,13 +171,13 @@ function SchedaPeriodo({ periodo, disciplinaAttiva }) {
     <div style={{
       background: periodo.generale ? 'transparent' : PANEL,
       border: periodo.generale ? '1px dashed var(--cine-border-strong)' : BORDER,
-      padding: '16px 16px 14px',
+      padding: '20px 20px 18px',
     }}>
-      <div className="m-serif" style={{ fontSize: 15, fontWeight: 500, color: CREAM, lineHeight: 1.25 }}>
+      <div className="m-serif" style={{ fontSize: 18, fontWeight: 500, color: CREAM, lineHeight: 1.25 }}>
         {periodo.name}
       </div>
-      {periodo.range && <div style={{ ...mono, fontSize: 11, color: GOLD, marginTop: 3 }}>{periodo.range}</div>}
-      {periodo.note && <div style={{ ...serif, fontSize: 12.5, fontStyle: 'italic', color: MUTE, marginTop: 4 }}>{periodo.note}</div>}
+      {periodo.range && <div style={{ ...mono, fontSize: 13, color: GOLD, marginTop: 3 }}>{periodo.range}</div>}
+      {periodo.note && <div style={{ ...serif, fontSize: 15, fontStyle: 'italic', color: MUTE, marginTop: 4 }}>{periodo.note}</div>}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12, paddingTop: 12, borderTop: BORDER }}>
         {DISCIPLINE.map(d => {
@@ -185,13 +185,13 @@ function SchedaPeriodo({ periodo, disciplinaAttiva }) {
           const accesa = disciplinaAttiva && d.key === disciplinaAttiva;
           return (
             <div key={d.key} style={{ opacity: spenta ? 0.26 : 1, transition: 'opacity 150ms' }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 12.5 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 15 }}>
                 <span style={{
-                  width: 5, height: 5, borderRadius: '50%', flex: 'none',
+                  width: 6, height: 6, borderRadius: '50%', flex: 'none',
                   background: accesa ? GOLD : 'var(--cine-gold-dim)',
                 }}/>
                 <span style={{ ...serif, color: accesa ? GOLD : CREAM, fontWeight: accesa ? 600 : 400 }}>{d.label}</span>
-                {d.sub && <span style={{ ...serif, color: MUTE, fontSize: 11 }}>— {d.sub}</span>}
+                {d.sub && <span style={{ ...serif, color: MUTE, fontSize: 13 }}>— {d.sub}</span>}
               </div>
               {d.tiers && <Tiers tiers={d.tiers} evidenzia={accesa}/>}
             </div>
@@ -210,10 +210,10 @@ function Pannello({ titolo, nota, children, accento }) {
       background: accento
         ? 'linear-gradient(160deg, rgba(216,180,106,0.10), transparent 60%), ' + PANEL
         : PANEL,
-      padding: '22px 22px 20px',
+      padding: '26px 26px 24px',
     }}>
-      <div className="m-serif" style={{ fontSize: 18, fontWeight: 500, color: CREAM, marginBottom: 6 }}>{titolo}</div>
-      {nota && <div style={{ ...serif, fontSize: 12.5, color: DIM, lineHeight: 1.55, marginBottom: 16 }}>{nota}</div>}
+      <div className="m-serif" style={{ fontSize: 22, fontWeight: 500, color: CREAM, marginBottom: 6 }}>{titolo}</div>
+      {nota && <div style={{ ...serif, fontSize: 15, color: DIM, lineHeight: 1.65, marginBottom: 16 }}>{nota}</div>}
       {children}
     </div>
   );
@@ -222,21 +222,21 @@ function Pannello({ titolo, nota, children, accento }) {
 /* ── Titolo di sezione ────────────────────────────────────────────────────── */
 const Titolo = ({ children, top = 60 }) => (
   <div className="m-serif" style={{
-    fontSize: 20, fontWeight: 500, color: CREAM,
+    fontSize: 24, fontWeight: 500, color: CREAM,
     marginTop: top, marginBottom: 4, paddingBottom: 12, borderBottom: BORDER,
   }}>{children}</div>
 );
 
 /* ── Griglia di voci con titolo e testo ───────────────────────────────────── */
 const GrigliaVoci = ({ voci, pallino }) => (
-  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(268px, 1fr))', gap: '22px 30px', marginTop: 22 }}>
+  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '26px 38px', marginTop: 22 }}>
     {voci.map(v => (
       <div key={v.t}>
-        <div className="m-serif" style={{ fontSize: 14.5, fontWeight: 500, color: CREAM, marginBottom: 6 }}>
-          {pallino && <span style={{ color: GOLD, fontSize: 9, marginRight: 7, verticalAlign: 'middle' }}>▪</span>}
+        <div className="m-serif" style={{ fontSize: 18, fontWeight: 500, color: CREAM, marginBottom: 6 }}>
+          {pallino && <span style={{ color: GOLD, fontSize: 11, marginRight: 7, verticalAlign: 'middle' }}>▪</span>}
           {v.t}
         </div>
-        <Rich html={v.p} style={{ ...serif, fontSize: 12.5, lineHeight: 1.65, color: DIM, display: 'block' }}/>
+        <Rich html={v.p} style={{ ...serif, fontSize: 15, lineHeight: 1.72, color: DIM, display: 'block' }}/>
       </div>
     ))}
   </div>
@@ -276,17 +276,17 @@ export default function Sistema() {
   const vaiAllEra = id => eraRefs.current[id]?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 
   return (
-    <div style={{ padding: '26px 34px 70px', maxWidth: 1180, margin: '0 auto' }}>
+    <div style={{ padding: '30px 44px 90px' }}>
 
       {/* ── Intestazione ── */}
       <div style={{ paddingBottom: 22, borderBottom: BORDER }}>
-        <div style={{ ...cinzel(10, '0.24em', GOLD), display: 'flex', alignItems: 'center', gap: 9 }}>
-          <span style={{ fontSize: 13 }}>❦</span> Catalogo personale
+        <div style={{ ...cinzel(12, '0.24em', GOLD), display: 'flex', alignItems: 'center', gap: 9 }}>
+          <span style={{ fontSize: 15.5 }}>❦</span> Catalogo personale
         </div>
-        <div className="m-serif" style={{ fontSize: 38, fontWeight: 500, lineHeight: 1.05, marginTop: 8, color: CREAM }}>
+        <div className="m-serif" style={{ fontSize: 48, fontWeight: 500, lineHeight: 1.05, marginTop: 8, color: CREAM }}>
           Sistema di collocazione
         </div>
-        <div style={{ ...serif, fontSize: 14.5, lineHeight: 1.65, color: DIM, maxWidth: 660, marginTop: 12 }}>
+        <div style={{ ...serif, fontSize: 18, lineHeight: 1.72, color: DIM, maxWidth: 900, marginTop: 12 }}>
           Grande Era → sotto-periodo → disciplina → sottosezione → autore residente.
           Sedici sotto-periodi per sette discipline, articolate in diciassette sottosezioni.
           Dentro ogni sezione i libri si raccolgono attorno ai pensatori di cui si colleziona
@@ -301,7 +301,7 @@ export default function Sistema() {
             value={ricerca} onChange={e => setRicerca(e.target.value)}
             placeholder="cerca un sotto-periodo o un intervallo d'anni…"
             style={{
-              ...serif, fontSize: 13.5, padding: '9px 12px', flex: '1 1 260px', minWidth: 220,
+              ...serif, fontSize: 16, padding: '11px 14px', flex: '1 1 260px', minWidth: 220,
               background: 'rgba(0,0,0,0.32)', border: BORDER, color: CREAM, outline: 'none',
             }}
           />
@@ -312,7 +312,7 @@ export default function Sistema() {
                 <button key={d.key}
                   onClick={() => setDisciplina(attiva ? null : d.key)}
                   style={{
-                    ...serif, fontSize: 12.5, padding: '6px 12px', cursor: 'pointer',
+                    ...serif, fontSize: 15, padding: '8px 15px', cursor: 'pointer',
                     background: attiva ? GOLD : 'transparent',
                     border: `1px solid ${attiva ? GOLD : 'var(--cine-border)'}`,
                     color: attiva ? '#17100a' : DIM,
@@ -324,7 +324,7 @@ export default function Sistema() {
           </div>
           {filtriAttivi && (
             <button onClick={() => { setDisciplina(null); setRicerca(''); }}
-              style={{ ...mono, fontSize: 11, background: 'none', border: 'none', color: DIM,
+              style={{ ...mono, fontSize: 13, background: 'none', border: 'none', color: DIM,
                 cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3, padding: '6px 2px' }}>
               azzera filtri
             </button>
@@ -338,13 +338,13 @@ export default function Sistema() {
               style={{
                 flex: '1 1 0', background: PANEL, cursor: 'pointer', textAlign: 'left',
                 border: 'none', borderRight: i < ERE.length - 1 ? BORDER : 'none',
-                padding: '11px 13px', transition: 'background 150ms',
+                padding: '14px 16px', transition: 'background 150ms',
               }}
               onMouseEnter={e => { e.currentTarget.style.background = 'rgba(216,180,106,0.10)'; }}
               onMouseLeave={e => { e.currentTarget.style.background = PANEL; }}>
-              <span style={{ ...mono, fontSize: 10.5, color: GOLD, display: 'block', marginBottom: 3 }}>{era.numeral}</span>
-              <span className="m-serif" style={{ fontSize: 14, color: CREAM, display: 'block' }}>{era.title}</span>
-              <span style={{ ...mono, fontSize: 10, color: MUTE, display: 'block', marginTop: 2 }}>{era.range}</span>
+              <span style={{ ...mono, fontSize: 12.5, color: GOLD, display: 'block', marginBottom: 3 }}>{era.numeral}</span>
+              <span className="m-serif" style={{ fontSize: 17, color: CREAM, display: 'block' }}>{era.title}</span>
+              <span style={{ ...mono, fontSize: 12, color: MUTE, display: 'block', marginTop: 2 }}>{era.range}</span>
             </button>
           ))}
         </div>
@@ -364,21 +364,21 @@ export default function Sistema() {
                 userSelect: 'none', paddingBottom: 12, borderBottom: BORDER2, marginBottom: 20,
               }}>
               <span className="m-serif" style={{
-                fontSize: 14, color: GOLD, border: '1px solid var(--cine-gold-dim)',
-                width: 29, height: 29, borderRadius: '50%', flex: 'none',
+                fontSize: 17, color: GOLD, border: '1px solid var(--cine-gold-dim)',
+                width: 35, height: 35, borderRadius: '50%', flex: 'none',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'center',
               }}>{era.numeral}</span>
-              <span className="m-serif" style={{ fontSize: 25, fontWeight: 500, color: CREAM, flex: 1 }}>{era.title}</span>
-              <span style={{ ...mono, fontSize: 12, color: MUTE }}>{era.range}</span>
+              <span className="m-serif" style={{ fontSize: 31, fontWeight: 500, color: CREAM, flex: 1 }}>{era.title}</span>
+              <span style={{ ...mono, fontSize: 14, color: MUTE }}>{era.range}</span>
               <span style={{
-                border: BORDER, color: DIM, width: 25, height: 25, borderRadius: '50%',
+                border: BORDER, color: DIM, width: 30, height: 30, borderRadius: '50%',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none',
-                alignSelf: 'center', fontSize: 11,
+                alignSelf: 'center', fontSize: 13,
                 transform: chiusa ? 'rotate(-90deg)' : 'none', transition: 'transform 200ms',
               }}>⌃</span>
             </div>
             {!chiusa && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 15 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(340px, 100%), 1fr))', gap: 18 }}>
                 {periodi.map(p => (
                   <SchedaPeriodo key={p.name} periodo={p} disciplinaAttiva={disciplina}/>
                 ))}
@@ -389,7 +389,7 @@ export default function Sistema() {
       })}
 
       {totVisibili === 0 && (
-        <div style={{ ...serif, fontStyle: 'italic', color: MUTE, textAlign: 'center', padding: '50px 0', fontSize: 14 }}>
+        <div style={{ ...serif, fontStyle: 'italic', color: MUTE, textAlign: 'center', padding: '50px 0', fontSize: 17 }}>
           Nessun sotto-periodo corrisponde alla ricerca.
         </div>
       )}
@@ -401,13 +401,13 @@ export default function Sistema() {
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {TRASVERSALI.map((t, i) => (
               <div key={t} style={{
-                display: 'flex', gap: 12, alignItems: 'baseline', padding: '10px 0',
+                display: 'flex', gap: 12, alignItems: 'baseline', padding: '13px 0',
                 borderBottom: i < TRASVERSALI.length - 1 ? BORDER : 'none',
               }}>
-                <span style={{ ...mono, fontSize: 10.5, color: GOLD, flex: 'none', width: 16 }}>
+                <span style={{ ...mono, fontSize: 12.5, color: GOLD, flex: 'none', width: 20 }}>
                   {String(i + 1).padStart(2, '0')}
                 </span>
-                <span style={{ ...serif, fontSize: 13, color: 'rgba(232,220,192,0.82)' }}>{t}</span>
+                <span style={{ ...serif, fontSize: 15.5, color: 'rgba(232,220,192,0.88)' }}>{t}</span>
               </div>
             ))}
           </div>
@@ -415,7 +415,7 @@ export default function Sistema() {
 
         <Pannello accento titolo="✦ Scaffale «Nuovi acquisti»"
           nota="Zona cuscinetto per i libri appena arrivati, prima della collocazione definitiva.">
-          <div style={{ ...serif, fontSize: 12.5, color: DIM, lineHeight: 1.65, paddingTop: 14, borderTop: '1px dashed var(--cine-border)' }}>
+          <div style={{ ...serif, fontSize: 15, color: DIM, lineHeight: 1.72, paddingTop: 14, borderTop: '1px dashed var(--cine-border)' }}>
             <strong style={{ color: CREAM }}>Ordine:</strong> per data di acquisizione, non alfabetico — è una zona di transito.
             <br/><br/>
             <strong style={{ color: CREAM }}>Ricollocazione:</strong> a cadenza periodica, spostando ogni titolo nella sua sezione definitiva.
@@ -425,39 +425,39 @@ export default function Sistema() {
 
       {/* ── Guida ── */}
       <div style={{ marginTop: 78, paddingTop: 30, borderTop: BORDER }}>
-        <div style={cinzel(10, '0.24em', GOLD)}>Guida</div>
-        <div className="m-serif" style={{ fontSize: 28, fontWeight: 500, color: CREAM, margin: '10px 0 8px' }}>
+        <div style={cinzel(12, '0.24em', GOLD)}>Guida</div>
+        <div className="m-serif" style={{ fontSize: 34, fontWeight: 500, color: CREAM, margin: '10px 0 8px' }}>
           Dove va questo libro
         </div>
-        <div style={{ ...serif, fontSize: 14, lineHeight: 1.6, color: DIM, maxWidth: 620 }}>
+        <div style={{ ...serif, fontSize: 17, lineHeight: 1.7, color: DIM, maxWidth: 880 }}>
           Sei domande, in quest'ordine. La prima che dà una risposta chiude la questione.
         </div>
 
         <ol style={{
-          listStyle: 'none', margin: '30px 0 0', padding: '0 0 0 30px',
-          borderLeft: BORDER, display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 760,
+          listStyle: 'none', margin: '30px 0 0', padding: '0 0 0 36px',
+          borderLeft: BORDER, display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 1000,
         }}>
           {PERCORSO.map((f, i) => (
             <li key={f.q} style={{ position: 'relative' }}>
               <span style={{
-                position: 'absolute', left: -42, top: -1, width: 24, height: 24,
+                position: 'absolute', left: -50, top: -1, width: 29, height: 29,
                 border: '1px solid var(--cine-gold-dim)', borderRadius: '50%',
-                background: 'var(--cine-bg)', color: GOLD, ...mono, fontSize: 11,
+                background: 'var(--cine-bg)', color: GOLD, ...mono, fontSize: 13,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>{i + 1}</span>
-              <span className="m-serif" style={{ fontSize: 16, color: CREAM, display: 'block', marginBottom: 5 }}>
+              <span className="m-serif" style={{ fontSize: 20, color: CREAM, display: 'block', marginBottom: 5 }}>
                 {f.q}
-                {f.stop && <span style={{ ...mono, fontSize: 10, color: GOLD, letterSpacing: '0.08em', textTransform: 'uppercase', marginLeft: 8 }}>fine</span>}
+                {f.stop && <span style={{ ...mono, fontSize: 12, color: GOLD, letterSpacing: '0.08em', textTransform: 'uppercase', marginLeft: 8 }}>fine</span>}
               </span>
-              <Rich html={f.a} style={{ ...serif, fontSize: 13, lineHeight: 1.65, color: DIM, display: 'block' }}/>
+              <Rich html={f.a} style={{ ...serif, fontSize: 15.5, lineHeight: 1.72, color: DIM, display: 'block' }}/>
             </li>
           ))}
         </ol>
 
         <div style={{
-          margin: '30px 0 0', padding: '16px 18px', maxWidth: 760,
+          margin: '30px 0 0', padding: '20px 24px', maxWidth: 1000,
           border: '1px dashed var(--cine-gold-dim)', ...serif,
-          fontSize: 13.5, lineHeight: 1.65, color: DIM,
+          fontSize: 16, lineHeight: 1.72, color: DIM,
         }}>
           Se al termine restano due collocazioni ugualmente difendibili, scegline una, scrivila
           nel registro delle decisioni e registra l'altra come tag.{' '}
@@ -465,18 +465,18 @@ export default function Sistema() {
         </div>
 
         <Titolo>Le regole</Titolo>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(268px, 1fr))', gap: '24px 30px', marginTop: 22 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '30px 38px', marginTop: 22 }}>
           {REGOLE.map(r => (
             <div key={r.tag}>
-              <div style={{ ...cinzel(9.5, '0.14em', GOLD), marginBottom: 8 }}>{r.tag}</div>
-              <Rich html={r.p} style={{ ...serif, fontSize: 13, lineHeight: 1.65, color: DIM, display: 'block' }}/>
+              <div style={{ ...cinzel(11.5, '0.14em', GOLD), marginBottom: 8 }}>{r.tag}</div>
+              <Rich html={r.p} style={{ ...serif, fontSize: 15.5, lineHeight: 1.72, color: DIM, display: 'block' }}/>
             </div>
           ))}
         </div>
 
         <Titolo>Ordine dentro la sezione</Titolo>
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.15fr) minmax(0,1fr)', gap: 32, marginTop: 22, alignItems: 'start' }}>
-          <div style={{ ...serif, fontSize: 13, lineHeight: 1.7, color: DIM }}>
+          <div style={{ ...serif, fontSize: 15.5, lineHeight: 1.7, color: DIM }}>
             <p style={{ margin: '0 0 12px' }}>
               <strong style={{ color: CREAM }}>In testa</strong> gli strumenti di quel periodo e di quella
               disciplina: dizionari, repertori, storie generali, antologie.
@@ -490,11 +490,11 @@ export default function Sistema() {
           <ol style={{ listStyle: 'none', margin: 0, padding: 0, border: BORDER, background: PANEL }}>
             {SEQUENZA.map((s, i) => (
               <li key={s} style={{
-                display: 'flex', gap: 12, alignItems: 'baseline', padding: '9px 15px',
+                display: 'flex', gap: 12, alignItems: 'baseline', padding: '12px 18px',
                 borderBottom: i < SEQUENZA.length - 1 ? BORDER : 'none',
-                ...serif, fontSize: 13, color: 'rgba(232,220,192,0.82)',
+                ...serif, fontSize: 15.5, color: 'rgba(232,220,192,0.88)',
               }}>
-                <span style={{ ...mono, fontSize: 10.5, color: GOLD, flex: 'none' }}>
+                <span style={{ ...mono, fontSize: 12.5, color: GOLD, flex: 'none' }}>
                   {String(i + 1).padStart(2, '0')}
                 </span>
                 {s}
@@ -512,7 +512,7 @@ export default function Sistema() {
 
       {/* ── Piede ── */}
       <div style={{
-        marginTop: 60, paddingTop: 18, borderTop: BORDER, ...mono, fontSize: 11, color: MUTE,
+        marginTop: 60, paddingTop: 18, borderTop: BORDER, ...mono, fontSize: 13, color: MUTE,
         display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10,
       }}>
         <span>Biblioteca personale — riferimento di consultazione</span>
