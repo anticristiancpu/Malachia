@@ -37,6 +37,10 @@ COPY --from=backend-deps /app/backend/node_modules ./backend/node_modules
 # Frontend buildato, servito dal backend Express
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
+# Seme del primo avvio: catalogo e immagini iniziali. Vengono copiati nei volumi
+# solo se questi risultano vuoti (vedi seminaSeVuoto in backend/src/index.js).
+COPY seed/ ./seed/
+
 # I dati persistenti (database e uploads) sono montati come volumi a runtime.
 EXPOSE 3001
 

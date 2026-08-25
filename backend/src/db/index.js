@@ -92,4 +92,4 @@ function runMigrations() {
   } catch {}
 }
 
-module.exports = { getDb };
+module.exports = { getDb, DB_PATH };

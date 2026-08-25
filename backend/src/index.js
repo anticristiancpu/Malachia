@@ -25,8 +25,42 @@ app.use(fileUpload({ limits: { fileSize: 20 * 1024 * 1024 }, useTempFiles: false
 // Le immagini caricate non cambiano mai a parità di nome: le facciamo cacheare dal browser
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d' }));
 
+// Semina iniziale: alla prima installazione le cartelle dei dati sono vuote,
+// perché Umbrel le monta dall'host sopra quelle dell'immagine. Se l'immagine
+// porta un seme, lo si copia una volta sola; da lì in poi comandano i dati
+// dell'utente e il seme non viene più toccato.
+const SEED_DIR = path.join(__dirname, '../../seed');
+
+function seminaSeVuoto(dbPath) {
+  if (!fs.existsSync(SEED_DIR)) return;
+  try {
+    const semeDb = path.join(SEED_DIR, 'malachia-seed.db');
+    if (fs.existsSync(semeDb) && !fs.existsSync(dbPath)) {
+      fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+      fs.copyFileSync(semeDb, dbPath);
+      console.log('  ✦ Catalogo iniziale installato');
+    }
+    for (const sub of ['covers', 'backgrounds']) {
+      const src = path.join(SEED_DIR, sub);
+      const dst = path.join(UPLOADS_DIR, sub);
+      if (!fs.existsSync(src)) continue;
+      fs.mkdirSync(dst, { recursive: true });
+      if (fs.readdirSync(dst).length > 0) continue; // già popolata: non toccarla
+      let n = 0;
+      for (const f of fs.readdirSync(src)) {
+        fs.copyFileSync(path.join(src, f), path.join(dst, f));
+        n++;
+      }
+      if (n) console.log(`  ✦ ${n} immagini iniziali in ${sub}/`);
+    }
+  } catch (e) {
+    console.warn('  Semina iniziale non riuscita:', e.message);
+  }
+}
+
 // Inizializza DB all'avvio
-const { getDb } = require('./db');
+const { getDb, DB_PATH } = require('./db');
+seminaSeVuoto(DB_PATH);
 getDb();
 seedGenres();
 
