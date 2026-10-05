@@ -51,11 +51,98 @@ function runMigrations() {
     'ALTER TABLE books ADD COLUMN placement_id TEXT',
     'ALTER TABLE books ADD COLUMN placement_at TEXT',
     'CREATE INDEX IF NOT EXISTS idx_books_placement ON books(placement_id)',
+    // ─── Scaffali virtuali ───
+    // L'ordine e i raggruppamenti stavano nel localStorage del browser: li
+    // portiamo nel database, così sopravvivono al cambio di dispositivo e
+    // finiscono nei backup. Posizioni distanziate (10, 20, 30...) per poter
+    // inserire in mezzo senza rinumerare lo scaffale.
+    'ALTER TABLE shelf_books ADD COLUMN position REAL',
+    'ALTER TABLE shelf_books ADD COLUMN section_id TEXT',
+    "ALTER TABLE shelves ADD COLUMN kind TEXT DEFAULT 'tematico'",
+    `CREATE TABLE IF NOT EXISTS shelf_sections (
+       id TEXT PRIMARY KEY,
+       shelf_id TEXT REFERENCES shelves(id) ON DELETE CASCADE,
+       name TEXT,
+       position REAL,
+       created_at TEXT DEFAULT (datetime('now'))
+     )`,
+    'CREATE INDEX IF NOT EXISTS idx_shelf_books_book ON shelf_books(book_id)',
+    'CREATE INDEX IF NOT EXISTS idx_shelf_sections_shelf ON shelf_sections(shelf_id)',
+
+    // ─── Tipo del record ───
+    // item_type è il tipo autoritativo (cartaceo / ebook / opera); format
+    // resta il tipo di rilegatura. Il default riempie i record esistenti,
+    // che sono tutti cartacei.
+    "ALTER TABLE books ADD COLUMN item_type TEXT DEFAULT 'cartaceo'",
+    // Riferimenti al gestore ebook, neutri rispetto al prodotto usato
+    'ALTER TABLE books ADD COLUMN ebook_server TEXT',
+    'ALTER TABLE books ADD COLUMN ebook_external_id TEXT',
+    'ALTER TABLE books ADD COLUMN ebook_url TEXT',
+    // Opere d'arte
+    'ALTER TABLE books ADD COLUMN artwork_place TEXT',
+    'ALTER TABLE books ADD COLUMN artwork_date TEXT',
+    'ALTER TABLE books ADD COLUMN artwork_technique TEXT',
+    'ALTER TABLE books ADD COLUMN artwork_image TEXT',
+    'CREATE INDEX IF NOT EXISTS idx_books_item_type ON books(item_type)',
+
     // "Nuovi acquisti" non fa più parte della collocazione: quei volumi tornano da collocare
     "UPDATE books SET placement_id = NULL WHERE placement_id = 'nuovi-acquisti'",
   ];
   for (const m of migrations) {
     try { db.exec(m); } catch {}
+  }
+
+  // Posizioni mancanti negli scaffali: assegnate in ordine di inserimento e
+  // distanziate di 10, così resta spazio per intercalare senza rinumerare.
+  try {
+    const senzaPosizione = db.prepare(
+      'SELECT shelf_id, book_id FROM shelf_books WHERE position IS NULL ORDER BY shelf_id, added_at'
+    ).all();
+    if (senzaPosizione.length) {
+      const upd = db.prepare('UPDATE shelf_books SET position = ? WHERE shelf_id = ? AND book_id = ?');
+      const contatore = {};
+      db.transaction(righe => {
+        for (const r of righe) {
+          contatore[r.shelf_id] = (contatore[r.shelf_id] || 0) + 10;
+          upd.run(contatore[r.shelf_id], r.shelf_id, r.book_id);
+        }
+      })(senzaPosizione);
+    }
+  } catch {}
+
+  // Tipo del record: nessuno resta senza, e un ebook segnato solo nella
+  // rilegatura viene riconosciuto anche come tipo.
+  try { db.exec("UPDATE books SET item_type = 'cartaceo' WHERE item_type IS NULL OR item_type = ''"); } catch {}
+  try { db.exec("UPDATE books SET item_type = 'ebook' WHERE format = 'ebook' AND COALESCE(item_type,'') <> 'ebook'"); } catch {}
+
+  // L'indice di ricerca può restare indietro (import che non lo aggiornano).
+  // Lo ricostruiamo solo quando i conteggi non coincidono: è autoriparante.
+  try {
+    const libri = db.prepare('SELECT COUNT(*) AS n FROM books').get().n;
+    const indicizzati = db.prepare('SELECT COUNT(*) AS n FROM books_fts').get().n;
+    if (libri !== indicizzati) {
+      const righe = db.prepare(`
+        SELECT b.id, b.title, b.subtitle, b.original_title, b.publisher, b.synopsis,
+               b.personal_notes, b.tags, b.isbn10, b.isbn13,
+               (SELECT GROUP_CONCAT(a.name, ' ') FROM authors a
+                  JOIN book_authors ba ON a.id = ba.author_id WHERE ba.book_id = b.id) AS author_names
+        FROM books b`).all();
+      const ins = db.prepare(`INSERT INTO books_fts
+        (id, title, subtitle, original_title, author_names, publisher, synopsis, personal_notes, tags, isbn10, isbn13)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+      db.transaction(() => {
+        // Una tabella FTS5 senza contenuto si svuota solo con questo comando
+        db.exec("INSERT INTO books_fts(books_fts) VALUES('delete-all')");
+        for (const r of righe) {
+          ins.run(r.id, r.title || '', r.subtitle || '', r.original_title || '', r.author_names || '',
+                  r.publisher || '', r.synopsis || '', r.personal_notes || '', r.tags || '',
+                  r.isbn10 || '', r.isbn13 || '');
+        }
+      })();
+      console.log(`  ✦ Indice di ricerca riallineato: ${indicizzati} → ${righe.length} voci`);
+    }
+  } catch (e) {
+    console.warn('  Indice di ricerca non riallineato:', e.message);
   }
 
   // Ricalcola name_sort con l'algoritmo aggiornato (particelle nobiliari)

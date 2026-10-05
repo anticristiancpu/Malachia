@@ -1,531 +1,519 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import BookCover from '../components/BookCover.jsx';
-import { shelves as shelvesApi } from '../api/index.js';
+import { tipoRecord } from '../components/EbookMark.jsx';
+import { shelves as shelvesApi, books as booksApi } from '../api/index.js';
 import { useToast } from '../components/Toast.jsx';
 
-const SEC_DEFAULT = '__default__';
+/* ══════════════════════════════════════════════════════════════════════════
+   Uno scaffale: i libri nell'ordine in cui dialogano fra loro.
 
-/* ── localStorage helpers ── */
-function lsKey(shelfId) { return `malachia-shelf-sections-${shelfId}`; }
+   Ordine e sezioni vivono nel database (shelf_books.position / section_id),
+   non più nel browser: seguono il catalogo su qualsiasi dispositivo e
+   finiscono nei backup. Lo scaffale rimanda ai record, non li duplica:
+   toglierne uno non tocca il catalogo.
+   ══════════════════════════════════════════════════════════════════════════ */
 
-function loadSections(shelfId, allBooks) {
-  try {
-    const raw = JSON.parse(localStorage.getItem(lsKey(shelfId)) || 'null');
-    if (!raw || raw.length === 0) throw new Error('empty');
-    const allIds  = new Set(allBooks.map(b => b.id));
-    const inMeta  = new Set(raw.flatMap(s => s.bookIds));
-    const newItems = allBooks.map(b => b.id).filter(id => !inMeta.has(id));
-    // Individua la sezione "principale" (quella che accoglie i nuovi libri)
-    const defaultIdx = raw.findIndex(s => s.id === SEC_DEFAULT);
-    const sections = raw.map((s, i) => ({
-      ...s,
-      bookIds: [
-        ...s.bookIds.filter(id => allIds.has(id)),
-        ...(i === (defaultIdx >= 0 ? defaultIdx : 0) ? newItems : []),
-      ],
-    }));
-    // Se non c'è nessuna sezione SEC_DEFAULT ma ci sono sezioni, aggiungi i nuovi alla prima
-    if (defaultIdx === -1 && newItems.length > 0 && sections.length > 0) {
-      sections[0] = { ...sections[0], bookIds: [...sections[0].bookIds, ...newItems] };
-    }
-    return sections.length > 0 ? sections : [{ id: SEC_DEFAULT, name: null, bookIds: allBooks.map(b => b.id) }];
-  } catch {
-    return [{ id: SEC_DEFAULT, name: null, bookIds: allBooks.map(b => b.id) }];
-  }
+const SEZIONE_BASE = '__base__'; // la sezione senza nome: section_id vuoto nel database
+
+const conta = (libri, tipo) => libri.filter(b => tipoRecord(b) === tipo).length;
+
+/** "12 libri · 4 ebook · 2 opere", saltando le voci a zero. */
+function riepilogo(libri) {
+  const voci = [
+    [conta(libri, 'cartaceo'), 'libro', 'libri'],
+    [conta(libri, 'ebook'), 'ebook', 'ebook'],
+    [conta(libri, 'opera'), 'opera', 'opere'],
+  ].filter(([n]) => n > 0);
+  if (!voci.length) return 'vuoto';
+  return voci.map(([n, s, p]) => `${n} ${n === 1 ? s : p}`).join(' · ');
 }
 
-function saveSections(shelfId, sections) {
-  localStorage.setItem(lsKey(shelfId), JSON.stringify(sections));
-}
-
-/* ─── BookContextMenu ─────────────────────────────────────────────────────── */
-function BookContextMenu({ x, y, book, sections, onMoveToSection, onRemove, onClose, onNavigate }) {
+/* ── Menu contestuale di una riga ─────────────────────────────────────────── */
+function MenuRiga({ x, y, libro, sezioni, sezioneCorrente, altriScaffali,
+                    onSpostaInSezione, onTrasferisci, onTogli, onApri, onChiudi }) {
   const ref = useRef(null);
   const [pos, setPos] = useState({ left: x, top: y });
 
   useEffect(() => {
     if (!ref.current) return;
-    const r  = ref.current.getBoundingClientRect();
-    const vw = window.innerWidth, vh = window.innerHeight;
+    const r = ref.current.getBoundingClientRect();
     setPos({
-      left: r.right  > vw ? Math.max(4, x - r.width)  : x,
-      top:  r.bottom > vh ? Math.max(4, y - r.height) : y,
+      left: r.right > window.innerWidth ? Math.max(4, x - r.width) : x,
+      top:  r.bottom > window.innerHeight ? Math.max(4, window.innerHeight - r.height - 6) : y,
     });
   }, [x, y]);
 
   useEffect(() => {
-    function onMouse(e) { if (ref.current && !ref.current.contains(e.target)) onClose(); }
-    function onKey(e)   { if (e.key === 'Escape') onClose(); }
-    document.addEventListener('mousedown', onMouse);
-    document.addEventListener('keydown',   onKey);
-    return () => { document.removeEventListener('mousedown', onMouse); document.removeEventListener('keydown', onKey); };
-  }, [onClose]);
+    const giu = e => { if (ref.current && !ref.current.contains(e.target)) onChiudi(); };
+    const tasto = e => { if (e.key === 'Escape') onChiudi(); };
+    document.addEventListener('mousedown', giu);
+    document.addEventListener('keydown', tasto);
+    return () => { document.removeEventListener('mousedown', giu); document.removeEventListener('keydown', tasto); };
+  }, [onChiudi]);
 
-  const currentSectionId = sections.find(s => s.bookIds.includes(book.id))?.id;
+  const Voce = ({ children, onClick, pericolo }) => (
+    <div onClick={onClick}
+      onMouseEnter={e => e.currentTarget.style.background = 'var(--m-rule)'}
+      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+      style={{ padding: '7px 14px', cursor: 'pointer', fontSize: 13,
+        color: pericolo ? 'var(--m-vermilion)' : 'var(--m-ink)' }}>{children}</div>
+  );
+  const Titoletto = ({ children }) => (
+    <div className="m-eyebrow" style={{ fontSize: 9, padding: '8px 14px 3px', color: 'var(--m-ink-muted)' }}>{children}</div>
+  );
 
   return (
     <div ref={ref} style={{
       position: 'fixed', left: pos.left, top: pos.top, zIndex: 600,
       background: 'var(--m-parchment)', border: '1px solid var(--m-rule)',
-      boxShadow: '0 4px 18px rgba(0,0,0,0.18)', minWidth: 210,
-      display: 'flex', flexDirection: 'column',
+      boxShadow: '0 4px 18px rgba(0,0,0,0.35)', minWidth: 236,
+      maxHeight: '80vh', overflowY: 'auto', paddingBottom: 4,
     }}>
-      <div style={{ padding: '8px 12px 7px', borderBottom: '1px solid var(--m-rule)' }}>
-        <div className="m-eyebrow" style={{ fontSize: 10 }}>Sposta in sottosezione</div>
-        <div className="m-serif" style={{ fontSize: 13, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 230 }}>
-          {book.title}
-        </div>
+      <div style={{ padding: '8px 14px 7px', borderBottom: '1px solid var(--m-rule)' }}>
+        <div className="m-serif" style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden',
+          textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}>{libro.title}</div>
       </div>
 
-      <div style={{ maxHeight: 260, overflowY: 'auto' }}>
-        {sections.map(sec => {
-          const isCurrent = sec.id === currentSectionId;
-          const label = sec.name || 'Sezione generica';
-          return (
-            <div key={sec.id}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '7px 14px', cursor: isCurrent ? 'default' : 'pointer', fontSize: 13,
-                background: isCurrent ? 'color-mix(in srgb, var(--m-terracotta) 9%, transparent)' : 'transparent',
-                color: isCurrent ? 'var(--m-terracotta)' : 'var(--m-ink)',
-                fontWeight: isCurrent ? 600 : 400, transition: 'background 100ms',
-              }}
-              onMouseEnter={e => { if (!isCurrent) e.currentTarget.style.background = 'var(--m-rule)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = isCurrent ? 'color-mix(in srgb, var(--m-terracotta) 9%, transparent)' : 'transparent'; }}
-              onClick={() => { if (!isCurrent) { onMoveToSection(book, sec.id); onClose(); } }}
-            >
-              {isCurrent && <span style={{ fontSize: 10 }}>✓</span>}
-              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-            </div>
-          );
-        })}
-      </div>
+      <Voce onClick={() => { onChiudi(); onApri(libro.id); }}>› Apri la scheda</Voce>
 
-      <div style={{ borderTop: '1px solid var(--m-rule)' }}>
-        <div
-          style={{ padding: '7px 14px', cursor: 'pointer', fontSize: 12, color: 'var(--m-ink-muted)', transition: 'background 100ms' }}
-          onMouseEnter={e => e.currentTarget.style.background = 'var(--m-rule)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          onClick={() => { onClose(); onNavigate(book.id); }}
-        >› apri dettaglio libro</div>
-        <div
-          style={{ padding: '7px 14px', cursor: 'pointer', fontSize: 12, color: '#c0392b', transition: 'background 100ms' }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(192,57,43,0.07)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          onClick={() => { onRemove(book); onClose(); }}
-        >× rimuovi dallo scaffale</div>
+      {sezioni.length > 1 && (
+        <>
+          <Titoletto>Sposta nella sezione</Titoletto>
+          {sezioni.map(s => (
+            <Voce key={s.id} onClick={() => { onChiudi(); onSpostaInSezione(libro, s.id); }}>
+              {s.id === sezioneCorrente ? '• ' : '  '}{s.name || 'Sezione generica'}
+            </Voce>
+          ))}
+        </>
+      )}
+
+      {altriScaffali.length > 0 && (
+        <>
+          <Titoletto>Sposta su un altro scaffale</Titoletto>
+          {altriScaffali.map(s => (
+            <Voce key={'m' + s.id} onClick={() => { onChiudi(); onTrasferisci(libro, s.id, 'move'); }}>→ {s.name}</Voce>
+          ))}
+          <Titoletto>Copia su un altro scaffale</Titoletto>
+          {altriScaffali.map(s => (
+            <Voce key={'c' + s.id} onClick={() => { onChiudi(); onTrasferisci(libro, s.id, 'copy'); }}>⧉ {s.name}</Voce>
+          ))}
+        </>
+      )}
+
+      <div style={{ borderTop: '1px solid var(--m-rule)', marginTop: 4, paddingTop: 4 }}>
+        <Voce pericolo onClick={() => { onChiudi(); onTogli(libro); }}>✕ Togli dallo scaffale</Voce>
       </div>
     </div>
   );
 }
 
-/* ─── CreateSectionModal ─────────────────────────────────────────────────── */
-function CreateSectionModal({ onSave, onClose }) {
-  const [name, setName] = useState('');
+/* ── Aggiunta rapida: cerca nel catalogo e inserisci in un punto preciso ──── */
+function AggiuntaRapida({ giaPresenti, onScegli, onChiudi }) {
+  const [q, setQ] = useState('');
+  const [esiti, setEsiti] = useState([]);
+  const [cerco, setCerco] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const testo = q.trim();
+      if (testo.length < 2) { setEsiti([]); return; }
+      setCerco(true);
+      booksApi.list({ search: testo, limit: 12 })
+        .then(r => setEsiti(r.books || []))
+        .catch(() => setEsiti([]))
+        .finally(() => setCerco(false));
+    }, 220); // ricerca mentre scrivo, senza interrogare a ogni tasto
+    return () => clearTimeout(t);
+  }, [q]);
+
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400 }}>
-      <div style={{ background: 'var(--m-parchment)', padding: 28, width: 380, border: '1px solid var(--m-rule)', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div className="m-serif" style={{ fontSize: 18, fontWeight: 500 }}>Nuova sottosezione</div>
-        <div className="m-field">
-          <label>Nome</label>
-          <input
-            className="m-input" value={name} autoFocus
-            onChange={e => setName(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && name.trim()) onSave(name.trim()); if (e.key === 'Escape') onClose(); }}
-            placeholder="es. Letti · Da rileggere · Preferiti…"
-          />
-        </div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button className="m-btn m-btn-ghost" onClick={onClose}>Annulla</button>
-          <button className="m-btn" onClick={() => name.trim() && onSave(name.trim())} disabled={!name.trim()}>Crea</button>
-        </div>
+    <div style={{ border: '1px solid var(--m-rule-strong)', background: 'var(--m-parchment)',
+                  padding: 10, marginTop: 8 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input className="m-input" autoFocus value={q} onChange={e => setQ(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Escape') onChiudi(); }}
+          placeholder="cerca nel catalogo per titolo o autore…"
+          style={{ flex: 1, padding: '6px 10px', fontSize: 13 }}/>
+        <button className="m-btn m-btn-ghost m-btn-sm" onClick={onChiudi}>chiudi</button>
       </div>
+
+      {q.trim().length >= 2 && (
+        <div style={{ marginTop: 8, maxHeight: 260, overflowY: 'auto' }}>
+          {cerco && esiti.length === 0 && (
+            <div style={{ fontSize: 12, color: 'var(--m-ink-muted)', fontStyle: 'italic', padding: 6 }}>cerco…</div>
+          )}
+          {!cerco && esiti.length === 0 && (
+            <div style={{ fontSize: 12, color: 'var(--m-ink-muted)', fontStyle: 'italic', padding: 6 }}>
+              nessun record corrisponde
+            </div>
+          )}
+          {esiti.map(b => {
+            const presente = giaPresenti.has(b.id);
+            return (
+              <div key={b.id}
+                onClick={() => { if (!presente) onScegli(b); }}
+                title={presente ? 'Già su questo scaffale' : 'Inserisci qui'}
+                style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 6px',
+                  cursor: presente ? 'default' : 'pointer', opacity: presente ? 0.45 : 1 }}
+                onMouseEnter={e => { if (!presente) e.currentTarget.style.background = 'var(--m-rule)'; }}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                <BookCover book={b} w={22} h={32}/>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {b.title}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--m-ink-muted)', fontStyle: 'italic',
+                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {b.author_names || '—'}
+                  </div>
+                </div>
+                {presente && <span style={{ fontSize: 10, color: 'var(--m-ink-muted)' }}>già qui</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
-/* ─── SectionBlock ─────────────────────────────────────────────────────────── */
-function SectionBlock({
-  section, booksMap, canDelete,
-  isSectionDragOver,
-  onSectionDragStart, onSectionDragOver, onSectionDragLeave, onSectionDrop,
-  isCollapsed, onToggleCollapse,
-  onRename, onDelete,
-  onBookContextMenu, onNavigate,
-}) {
-  const [renaming,   setRenaming]   = useState(false);
-  const [renameVal,  setRenameVal]  = useState('');
-  const [confirmDel, setConfirmDel] = useState(false);
+/* ══ Pagina ═══════════════════════════════════════════════════════════════ */
+export default function DettaglioScaffale() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const toast = useToast();
 
-  const isDefault = section.id === SEC_DEFAULT;
-  const displayName = section.name || 'Sezione generica';
-  const books = section.bookIds.map(id => booksMap[id]).filter(Boolean);
+  const [scaffale, setScaffale]   = useState(null);
+  const [tuttiScaffali, setTutti] = useState([]);
+  const [caricamento, setCaric]   = useState(true);
+  const [menu, setMenu]           = useState(null);
+  const [punto, setPunto]         = useState(null);   // dove inserire: { sectionId, afterBookId }
+  const [trascinato, setTrasc]    = useState(null);
+  const [sopra, setSopra]         = useState(null);   // riga sorvolata durante il trascinamento
+  const [rinomino, setRinomino]   = useState(false);
+  const [nomeTmp, setNomeTmp]     = useState('');
 
-  function startRename() { setRenameVal(section.name || ''); setRenaming(true); }
-  function commitRename() {
-    const v = renameVal.trim();
-    if (v !== section.name) onRename(section.id, v || null);
-    setRenaming(false);
+  const carica = useCallback(() => {
+    return shelvesApi.get(id)
+      .then(s => setScaffale(s))
+      .catch(() => { toast('Scaffale non trovato', 'error'); navigate('/scaffali'); })
+      .finally(() => setCaric(false));
+  }, [id, navigate, toast]);
+
+  useEffect(() => { carica(); }, [carica]);
+  useEffect(() => { shelvesApi.list().then(setTutti).catch(() => {}); }, []);
+
+  /* Le sezioni, con in testa quella senza nome che accoglie i nuovi arrivi. */
+  const sezioni = useMemo(() => {
+    if (!scaffale) return [];
+    return [
+      { id: SEZIONE_BASE, name: null, sectionId: null },
+      ...(scaffale.sections || []).map(s => ({ ...s, sectionId: s.id })),
+    ];
+  }, [scaffale]);
+
+  const perSezione = useMemo(() => {
+    const m = {};
+    for (const s of sezioni) m[s.id] = [];
+    for (const b of (scaffale?.books || [])) {
+      const chiave = b.section_id || SEZIONE_BASE;
+      (m[chiave] ||= []).push(b);
+    }
+    return m;
+  }, [scaffale, sezioni]);
+
+  const presenti = useMemo(() => new Set((scaffale?.books || []).map(b => b.id)), [scaffale]);
+  const altriScaffali = useMemo(() => tuttiScaffali.filter(s => s.id !== id), [tuttiScaffali, id]);
+
+  /* ── Azioni ── */
+  async function inserisci(libro) {
+    try {
+      await shelvesApi.addBook(id, libro.id, {
+        section_id: punto?.sectionId ?? null,
+        after_book_id: punto?.afterBookId ?? null,
+      });
+      setPunto(null);
+      await carica();
+      toast(`"${libro.title}" sullo scaffale`, 'success');
+    } catch (e) {
+      toast(e?.response?.data?.error || 'Non sono riuscito a inserirlo', 'error');
+    }
   }
 
+  async function togli(libro) {
+    try {
+      await shelvesApi.removeBook(id, libro.id);
+      await carica();
+      toast(`"${libro.title}" tolto dallo scaffale — resta in catalogo`, 'success');
+    } catch { toast('Errore nel togliere il record', 'error'); }
+  }
+
+  async function spostaInSezione(libro, sezioneId) {
+    try {
+      await shelvesApi.moveBook(id, libro.id, {
+        after_book_id: null,
+        section_id: sezioneId === SEZIONE_BASE ? null : sezioneId,
+      });
+      await carica();
+    } catch { toast('Errore nello spostamento', 'error'); }
+  }
+
+  async function trasferisci(libro, scaffaleId, modo) {
+    try {
+      await shelvesApi.transfer(id, libro.id, scaffaleId, modo);
+      await carica();
+      const dove = tuttiScaffali.find(s => s.id === scaffaleId)?.name || 'altro scaffale';
+      toast(modo === 'move' ? `Spostato in "${dove}"` : `Copiato in "${dove}"`, 'success');
+    } catch { toast('Errore nel trasferimento', 'error'); }
+  }
+
+  async function rilascia(sezioneId, dopoId) {
+    if (!trascinato) return;
+    const dest = sezioneId === SEZIONE_BASE ? null : sezioneId;
+    setTrasc(null); setSopra(null);
+    if (trascinato.id === dopoId) return;
+    try {
+      await shelvesApi.moveBook(id, trascinato.id, { after_book_id: dopoId, section_id: dest });
+      await carica();
+    } catch { toast('Errore nel riordino', 'error'); }
+  }
+
+  async function salvaNome() {
+    const v = nomeTmp.trim();
+    setRinomino(false);
+    if (!v || v === scaffale.name) return;
+    try { await shelvesApi.update(id, { name: v }); await carica(); }
+    catch { toast('Errore nella rinomina', 'error'); }
+  }
+
+  async function cambiaTipo() {
+    const nuovo = (scaffale.kind || 'tematico') === 'fisico' ? 'tematico' : 'fisico';
+    try { await shelvesApi.update(id, { kind: nuovo }); await carica(); }
+    catch { toast('Errore nel cambio di tipo', 'error'); }
+  }
+
+  async function nuovaSezione() {
+    try { await shelvesApi.addSection(id, 'Nuova sezione'); await carica(); }
+    catch { toast('Errore nella creazione della sezione', 'error'); }
+  }
+
+  if (caricamento) return (
+    <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><div className="m-spinner"/></div>
+  );
+  if (!scaffale) return null;
+
+  const libri = scaffale.books || [];
+  const fisico = (scaffale.kind || 'tematico') === 'fisico';
+
+  return (
+    <div style={{ padding: '26px 40px 70px', maxWidth: 1100 }}>
+
+      {/* ── Intestazione ── */}
+      <button className="m-btn m-btn-ghost m-btn-sm" onClick={() => navigate('/scaffali')}
+        style={{ fontSize: 11, marginBottom: 14 }}>‹ tutti gli scaffali</button>
+
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 260 }}>
+          <div className="m-eyebrow">Scaffale {fisico ? 'fisico' : 'tematico'}</div>
+          {rinomino ? (
+            <input className="m-input" autoFocus value={nomeTmp}
+              onChange={e => setNomeTmp(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') salvaNome(); if (e.key === 'Escape') setRinomino(false); }}
+              onBlur={salvaNome}
+              style={{ fontSize: 26, fontFamily: "'Cinzel', serif", padding: '2px 8px', marginTop: 4, width: '100%' }}/>
+          ) : (
+            <div className="m-serif" onDoubleClick={() => { setNomeTmp(scaffale.name); setRinomino(true); }}
+              title="Doppio clic per rinominare"
+              style={{ fontSize: 32, fontWeight: 500, lineHeight: 1.1, marginTop: 4, cursor: 'text' }}>
+              {scaffale.name}
+            </div>
+          )}
+          <div className="m-marginalia" style={{ marginTop: 6 }}>{riepilogo(libri)}</div>
+          {scaffale.description && (
+            <div className="m-marginalia" style={{ marginTop: 4, fontStyle: 'italic' }}>{scaffale.description}</div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button className="m-btn m-btn-ghost m-btn-sm" onClick={cambiaTipo}
+            title="Uno scaffale fisico corrisponde a un gruppo reale sulla libreria">
+            {fisico ? '▦ fisico' : '◇ tematico'}
+          </button>
+          <button className="m-btn m-btn-ghost m-btn-sm" onClick={nuovaSezione}>+ sezione</button>
+        </div>
+      </div>
+
+      <div style={{ height: 1, background: 'var(--m-rule)', margin: '20px 0 24px' }}/>
+
+      {/* ── Sezioni ── */}
+      {sezioni.map(sez => {
+        const righe = perSezione[sez.id] || [];
+        const base = sez.id === SEZIONE_BASE;
+        return (
+          <section key={sez.id} style={{ marginBottom: 30 }}>
+            <IntestazioneSezione
+              sezione={sez} base={base} conteggio={righe.length}
+              scaffaleId={id} onCambiato={carica} toast={toast}
+            />
+
+            {righe.length === 0 && (
+              <div className="m-marginalia" style={{ fontStyle: 'italic', padding: '10px 0 4px', fontSize: 12.5 }}>
+                {base ? 'Nessun record. Usa “aggiungi” qui sotto.' : 'Sezione vuota.'}
+              </div>
+            )}
+
+            {righe.map(b => (
+              <Riga
+                key={b.id} libro={b}
+                sorvolata={sopra === b.id}
+                inTrascinamento={trascinato?.id === b.id}
+                onDragStart={() => setTrasc(b)}
+                onDragEnd={() => { setTrasc(null); setSopra(null); }}
+                onDragOver={e => { e.preventDefault(); setSopra(b.id); }}
+                onDragLeave={() => setSopra(s => s === b.id ? null : s)}
+                onDrop={e => { e.preventDefault(); rilascia(sez.id, b.id); }}
+                onApri={() => navigate(`/libro/${b.id}`)}
+                onMenu={e => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, libro: b, sezione: sez.id }); }}
+                onInserisciQui={() => setPunto({ sectionId: base ? null : sez.id, afterBookId: b.id })}
+              />
+            ))}
+
+            {/* zona di rilascio in coda alla sezione */}
+            <div
+              onDragOver={e => { e.preventDefault(); setSopra('coda-' + sez.id); }}
+              onDragLeave={() => setSopra(s => s === 'coda-' + sez.id ? null : s)}
+              onDrop={e => { e.preventDefault(); rilascia(sez.id, righe.length ? righe[righe.length - 1].id : null); }}
+              style={{
+                marginTop: 6, paddingTop: 6,
+                borderTop: sopra === 'coda-' + sez.id ? '2px solid var(--m-terracotta)' : '2px solid transparent',
+              }}>
+              <button className="m-btn m-btn-ghost m-btn-sm" style={{ fontSize: 11 }}
+                onClick={() => setPunto({
+                  sectionId: base ? null : sez.id,
+                  afterBookId: righe.length ? righe[righe.length - 1].id : null,
+                })}>
+                + aggiungi in questa sezione
+              </button>
+            </div>
+
+            {punto && (punto.sectionId === (base ? null : sez.id)) && (
+              <AggiuntaRapida giaPresenti={presenti} onScegli={inserisci} onChiudi={() => setPunto(null)}/>
+            )}
+          </section>
+        );
+      })}
+
+      {menu && (
+        <MenuRiga
+          x={menu.x} y={menu.y} libro={menu.libro}
+          sezioni={sezioni} sezioneCorrente={menu.sezione}
+          altriScaffali={altriScaffali}
+          onSpostaInSezione={spostaInSezione}
+          onTrasferisci={trasferisci}
+          onTogli={togli}
+          onApri={bid => navigate(`/libro/${bid}`)}
+          onChiudi={() => setMenu(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── Intestazione di una sezione (rinomina / elimina) ─────────────────────── */
+function IntestazioneSezione({ sezione, base, conteggio, scaffaleId, onCambiato, toast }) {
+  const [rinomino, setRinomino] = useState(false);
+  const [val, setVal] = useState('');
+  const [conferma, setConferma] = useState(false);
+
+  async function salva() {
+    const v = val.trim();
+    setRinomino(false);
+    if (v === (sezione.name || '')) return;
+    try { await shelvesApi.updateSection(scaffaleId, sezione.id, { name: v || null }); onCambiato(); }
+    catch { toast('Errore nella rinomina', 'error'); }
+  }
+  async function elimina() {
+    try {
+      await shelvesApi.deleteSection(scaffaleId, sezione.id);
+      onCambiato();
+      toast('Sezione eliminata — i record restano sullo scaffale', 'success');
+    } catch { toast('Errore nell\'eliminazione', 'error'); }
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+      {rinomino ? (
+        <input className="m-input" autoFocus value={val} onChange={e => setVal(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') salva(); if (e.key === 'Escape') setRinomino(false); }}
+          onBlur={salva}
+          style={{ fontSize: 17, fontFamily: "'EB Garamond', serif", padding: '2px 8px', flex: '0 1 300px' }}/>
+      ) : (
+        <div className="m-serif"
+          onDoubleClick={() => { if (!base) { setVal(sezione.name || ''); setRinomino(true); } }}
+          title={base ? undefined : 'Doppio clic per rinominare'}
+          style={{ fontSize: 19, fontWeight: 500, flexShrink: 0, cursor: base ? 'default' : 'text' }}>
+          {sezione.name || 'Sezione generica'}
+        </div>
+      )}
+
+      <div style={{ flex: 1, height: 1, background: 'var(--m-rule)' }}/>
+      <span className="m-nums" style={{ fontSize: 11, color: 'var(--m-ink-muted)' }}>{conteggio}</span>
+
+      {!base && !conferma && (
+        <button className="m-btn m-btn-ghost m-btn-sm" style={{ fontSize: 10 }}
+          onClick={() => setConferma(true)}>✕</button>
+      )}
+      {!base && conferma && (
+        <span style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+          <span style={{ fontSize: 11, color: 'var(--m-ink-muted)' }}>eliminare la sezione?</span>
+          <button className="m-btn m-btn-sm" style={{ fontSize: 10 }} onClick={elimina}>sì</button>
+          <button className="m-btn m-btn-ghost m-btn-sm" style={{ fontSize: 10 }} onClick={() => setConferma(false)}>no</button>
+        </span>
+      )}
+    </div>
+  );
+}
+
+/* ── Una riga dello scaffale ──────────────────────────────────────────────── */
+function Riga({ libro, sorvolata, inTrascinamento, onDragStart, onDragEnd, onDragOver,
+                onDragLeave, onDrop, onApri, onMenu, onInserisciQui }) {
+  const [hover, setHover] = useState(false);
   return (
     <div
+      draggable
+      onDragStart={onDragStart} onDragEnd={onDragEnd}
+      onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
+      onContextMenu={onMenu}
+      onDoubleClick={onApri}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      title="Doppio clic: apri la scheda · tasto destro: altre azioni"
       style={{
-        borderTop: isSectionDragOver ? '3px solid var(--m-terracotta)' : '3px solid transparent',
-        transition: 'border-color 150ms',
-      }}
-      onDragOver={onSectionDragOver}
-      onDragLeave={onSectionDragLeave}
-      onDrop={onSectionDrop}
-    >
-      {/* ── Header ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: isCollapsed ? 0 : 16 }}>
-
-        {/* Drag handle — tutte le sezioni */}
-        <div
-          draggable
-          onDragStart={e => { e.stopPropagation(); onSectionDragStart(e); }}
-          title="Trascina per riordinare"
-          style={{ cursor: 'grab', color: 'var(--m-ink-muted)', fontSize: 15, flexShrink: 0, userSelect: 'none', lineHeight: 1 }}
-        >⠿</div>
-
-        {/* Titolo o rename input */}
-        {renaming ? (
-          <input
-            className="m-input" value={renameVal} autoFocus
-            onChange={e => setRenameVal(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setRenaming(false); }}
-            onBlur={commitRename}
-            style={{ fontSize: 18, fontFamily: "'EB Garamond', serif", fontWeight: 500, flex: '0 1 280px', padding: '2px 8px' }}
-          />
-        ) : (
-          <div className="m-serif" style={{ fontSize: 24, fontWeight: 500, lineHeight: 1.1, flexShrink: 0 }}>
-            {displayName}
-          </div>
-        )}
-
-        <div style={{ flex: 1, height: 1, background: 'var(--m-rule)' }}/>
-
-        <span className="m-nums" style={{ fontSize: 11, color: 'var(--m-ink-muted)', flexShrink: 0 }}>
-          {books.length} {books.length === 1 ? 'vol.' : 'vol.'}
-        </span>
-
-        {/* Rename */}
-        {!renaming && !confirmDel && (
-          <button
-            className="m-btn m-btn-ghost m-btn-sm"
-            style={{ fontSize: 11, color: 'var(--m-ink-muted)' }}
-            onClick={startRename}
-          >✎ rinomina</button>
-        )}
-
-        {/* Delete */}
-        {!confirmDel && !renaming && canDelete && (
-          <button
-            className="m-btn m-btn-ghost m-btn-sm"
-            style={{ fontSize: 11, color: 'var(--m-ink-muted)' }}
-            onClick={() => setConfirmDel(true)}
-          >× elimina</button>
-        )}
-        {confirmDel && (
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-            <span style={{ fontSize: 12, color: 'var(--m-ink-muted)', whiteSpace: 'nowrap' }}>Eliminare la sezione?</span>
-            <button className="m-btn m-btn-sm" style={{ fontSize: 11 }}
-              onClick={() => { onDelete(section.id); setConfirmDel(false); }}>Sì</button>
-            <button className="m-btn m-btn-ghost m-btn-sm" style={{ fontSize: 11 }}
-              onClick={() => setConfirmDel(false)}>No</button>
-          </div>
-        )}
-
-        {/* Collapse toggle */}
-        <button
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: 'var(--m-ink-muted)', fontSize: 13, flexShrink: 0, padding: '2px 4px',
-            transition: 'transform 150ms', transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
-          }}
-          onClick={onToggleCollapse} title={isCollapsed ? 'Espandi' : 'Comprimi'}
-        >▾</button>
-      </div>
-
-      {/* ── Griglia libri (multi-riga, flex-wrap) ── */}
-      {!isCollapsed && (
-        <div style={{
-          display: 'flex', flexWrap: 'wrap', gap: '20px 16px',
-          alignItems: 'flex-start', alignContent: 'flex-start',
-          paddingBottom: 8, minHeight: 240,
-        }}>
-          {books.length === 0 ? (
-            <div style={{
-              width: '100%', textAlign: 'center', padding: '32px 0',
-              color: 'var(--m-ink-muted)', fontStyle: 'italic', fontSize: 14,
-              fontFamily: "'EB Garamond', serif",
-            }}>
-              {isDefault ? 'Nessun libro non assegnato' : 'Nessun libro in questa sezione'}
-            </div>
-          ) : books.map(b => (
-            <div
-              key={b.id}
-              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, cursor: 'pointer', width: 150 }}
-              onClick={() => onNavigate(b.id)}
-              onContextMenu={e => { e.preventDefault(); onBookContextMenu(e, b); }}
-            >
-              <BookCover book={b} w={150} h={216}/>
-              <div className="m-serif" style={{
-                fontSize: 14, textAlign: 'center', lineHeight: 1.2,
-                overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-                width: '100%',
-              }}>{b.title}</div>
-              {b.author_names && (
-                <div className="m-marginalia" style={{
-                  fontSize: 12, textAlign: 'center', color: 'var(--m-ink-muted)', lineHeight: 1.2,
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%',
-                }}>{b.author_names}</div>
-              )}
-            </div>
-          ))}
+        display: 'flex', alignItems: 'center', gap: 11, padding: '5px 8px',
+        borderBottom: '1px solid var(--m-rule)',
+        borderTop: sorvolata ? '2px solid var(--m-terracotta)' : '2px solid transparent',
+        background: hover ? 'var(--m-rule)' : 'transparent',
+        opacity: inTrascinamento ? 0.4 : 1,
+        cursor: 'grab', userSelect: 'none',
+      }}>
+      <span style={{ color: 'var(--m-ink-muted)', fontSize: 14, flexShrink: 0, lineHeight: 1 }}>⠿</span>
+      <BookCover book={libro} w={26} h={38}/>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {libro.title}
         </div>
-      )}
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════════════════════════════
-   PAGINA PRINCIPALE
-════════════════════════════════════════════════════════════════════════════ */
-export default function DettaglioScaffale() {
-  const { id }   = useParams();
-  const navigate = useNavigate();
-  const toast    = useToast();
-
-  const [shelf,   setShelf]   = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  const [sections,          setSections]          = useState([]);
-  const [collapsedSections, setCollapsedSections] = useState(new Set());
-  const [showCreateSection, setShowCreateSection] = useState(false);
-
-  // Drag sezioni
-  const draggingSection   = useRef(null);
-  const [sectionDropTarget, setSectionDropTarget] = useState(null);
-
-  // Context menu libro
-  const [contextMenu, setContextMenu] = useState(null);
-
-  /* ── Carica scaffale ── */
-  useEffect(() => {
-    shelvesApi.get(id)
-      .then(s => {
-        setShelf(s);
-        setSections(loadSections(id, s.books || []));
-        setLoading(false);
-      })
-      .catch(() => navigate('/scaffali'));
-  }, [id]);
-
-  /* ── Mappa id → libro ── */
-  const booksMap = shelf
-    ? Object.fromEntries((shelf.books || []).map(b => [b.id, b]))
-    : {};
-
-  /* ── Salva sezioni ── */
-  function updateSections(next) {
-    setSections(next);
-    saveSections(id, next);
-  }
-
-  /* ── Crea sezione ── */
-  function createSection(name) {
-    setShowCreateSection(false);
-    const newSec = { id: `sec-${Date.now()}`, name, bookIds: [] };
-    updateSections([...sections, newSec]);
-  }
-
-  /* ── Rinomina sezione ── */
-  function renameSection(secId, newName) {
-    updateSections(sections.map(s => s.id === secId ? { ...s, name: newName } : s));
-  }
-
-  /* ── Elimina sezione (libri → prima sezione rimanente) ── */
-  function deleteSection(secId) {
-    if (sections.length <= 1) {
-      toast('Non puoi eliminare l\'unica sezione', 'error');
-      return;
-    }
-    const sec     = sections.find(s => s.id === secId);
-    if (!sec) return;
-    const orphans  = sec.bookIds;
-    let remaining  = sections.filter(s => s.id !== secId);
-
-    // I libri orfani vanno alla prima sezione rimanente
-    remaining = remaining.map((s, i) =>
-      i === 0 ? { ...s, bookIds: [...s.bookIds, ...orphans] } : s
-    );
-
-    // Se la sezione eliminata era SEC_DEFAULT, la prima rimanente diventa il nuovo default
-    if (secId === SEC_DEFAULT) {
-      remaining = remaining.map((s, i) => i === 0 ? { ...s, id: SEC_DEFAULT } : s);
-    }
-
-    updateSections(remaining);
-  }
-
-  /* ── Sposta libro in sezione ── */
-  function moveBookToSection(book, targetSecId) {
-    const next = sections.map(s => ({
-      ...s,
-      bookIds: s.id === targetSecId
-        ? (s.bookIds.includes(book.id) ? s.bookIds : [...s.bookIds, book.id])
-        : s.bookIds.filter(bid => bid !== book.id),
-    }));
-    updateSections(next);
-  }
-
-  /* ── Rimuovi libro dallo scaffale ── */
-  async function removeBook(book) {
-    try {
-      await shelvesApi.removeBook(id, book.id);
-      setShelf(sh => ({
-        ...sh,
-        books: (sh.books || []).filter(b => b.id !== book.id),
-        book_count: Math.max(0, (sh.book_count || 0) - 1),
-      }));
-      updateSections(sections.map(s => ({ ...s, bookIds: s.bookIds.filter(bid => bid !== book.id) })));
-      toast(`"${book.title}" rimosso dallo scaffale`, 'success');
-    } catch { toast('Errore durante la rimozione', 'error'); }
-  }
-
-  /* ── Drag sezioni ── */
-  function makeSectionDragStart(secId) {
-    return e => { e.stopPropagation(); draggingSection.current = secId; e.dataTransfer.effectAllowed = 'move'; };
-  }
-  function makeSectionDragOver(secId) {
-    return e => {
-      if (!draggingSection.current || draggingSection.current === secId) return;
-      e.preventDefault(); e.stopPropagation(); setSectionDropTarget(secId);
-    };
-  }
-  function makeSectionDragLeave(secId) {
-    return e => {
-      if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget))
-        setSectionDropTarget(s => s === secId ? null : s);
-    };
-  }
-  function makeSectionDrop(secId) {
-    return e => {
-      e.preventDefault(); e.stopPropagation();
-      if (draggingSection.current && draggingSection.current !== secId) {
-        const from = sections.findIndex(s => s.id === draggingSection.current);
-        const to   = sections.findIndex(s => s.id === secId);
-        if (from !== -1 && to !== -1) {
-          const next = [...sections];
-          const [moved] = next.splice(from, 1);
-          next.splice(to, 0, moved);
-          updateSections(next);
-        }
-      }
-      draggingSection.current = null; setSectionDropTarget(null);
-    };
-  }
-
-  /* ── Cleanup drag globale ── */
-  useEffect(() => {
-    function cleanup() { draggingSection.current = null; setSectionDropTarget(null); }
-    document.addEventListener('dragend', cleanup);
-    return () => document.removeEventListener('dragend', cleanup);
-  }, []);
-
-  /* ── Toggle collapse ── */
-  function toggleCollapse(secId) {
-    setCollapsedSections(prev => {
-      const next = new Set(prev);
-      next.has(secId) ? next.delete(secId) : next.add(secId);
-      return next;
-    });
-  }
-
-  if (loading) return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-      <div className="m-spinner"/>
-    </div>
-  );
-  if (!shelf) return null;
-
-  const totalBooks = (shelf.books || []).length;
-
-  return (
-    <div style={{ padding: '28px 36px', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24, flexShrink: 0 }}>
-        <div>
-          <button className="m-btn m-btn-ghost m-btn-sm" style={{ marginBottom: 10 }} onClick={() => navigate('/scaffali')}>
-            ‹ Scaffali
-          </button>
-          <div className="m-eyebrow">{totalBooks} {totalBooks === 1 ? 'volume' : 'volumi'}</div>
-          <div className="m-serif" style={{ fontSize: 38, fontWeight: 500, lineHeight: 1.05, marginTop: 2 }}>{shelf.name}</div>
-          {shelf.subtitle && <div className="m-marginalia" style={{ marginTop: 2 }}>{shelf.subtitle}</div>}
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
-          <button className="m-btn m-btn-ghost" onClick={() => setShowCreateSection(true)}>
-            + sottosezione
-          </button>
-          <div style={{ fontSize: 11, color: 'var(--m-ink-muted)', fontStyle: 'italic' }}>
-            Tasto destro su un libro per spostarlo o rimuoverlo
-          </div>
+        <div style={{ fontSize: 11.5, color: 'var(--m-ink-muted)', fontStyle: 'italic',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {libro.author_names || '—'}
         </div>
       </div>
-
-      {/* Sezioni */}
-      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 40, paddingBottom: 40 }}>
-
-        {sections.map(sec => (
-          <SectionBlock
-            key={sec.id}
-            section={sec}
-            booksMap={booksMap}
-            canDelete={sections.length > 1}
-            isSectionDragOver={sectionDropTarget === sec.id}
-            onSectionDragStart={makeSectionDragStart(sec.id)}
-            onSectionDragOver={makeSectionDragOver(sec.id)}
-            onSectionDragLeave={makeSectionDragLeave(sec.id)}
-            onSectionDrop={makeSectionDrop(sec.id)}
-            isCollapsed={collapsedSections.has(sec.id)}
-            onToggleCollapse={() => toggleCollapse(sec.id)}
-            onRename={renameSection}
-            onDelete={deleteSection}
-            onBookContextMenu={(e, book) => setContextMenu({ x: e.clientX, y: e.clientY, book })}
-            onNavigate={bookId => navigate(`/libro/${bookId}`)}
-          />
-        ))}
-
-        {totalBooks === 0 && (
-          <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--m-ink-muted)', fontStyle: 'italic', fontFamily: "'EB Garamond', serif", fontSize: 18 }}>
-            Scaffale vuoto — aggiungi libri con tasto destro dalla Libreria
-          </div>
-        )}
-      </div>
-
-      {/* Context menu libro */}
-      {contextMenu && (
-        <BookContextMenu
-          x={contextMenu.x} y={contextMenu.y}
-          book={contextMenu.book}
-          sections={sections}
-          onMoveToSection={moveBookToSection}
-          onRemove={removeBook}
-          onClose={() => setContextMenu(null)}
-          onNavigate={bookId => navigate(`/libro/${bookId}`)}
-        />
-      )}
-
-      {/* Modal nuova sezione */}
-      {showCreateSection && (
-        <CreateSectionModal
-          onSave={createSection}
-          onClose={() => setShowCreateSection(false)}
-        />
+      <span className="m-nums" style={{ fontSize: 11, color: 'var(--m-ink-muted)', flexShrink: 0 }}>
+        {libro.year || ''}
+      </span>
+      {hover && (
+        <button className="m-btn m-btn-ghost m-btn-sm" style={{ fontSize: 10, flexShrink: 0 }}
+          onClick={e => { e.stopPropagation(); onInserisciQui(); }}
+          title="Inserisci un record subito dopo questo">+</button>
       )}
     </div>
   );

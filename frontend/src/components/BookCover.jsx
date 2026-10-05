@@ -1,4 +1,5 @@
 import React from 'react';
+import EbookMark, { tipoRecord } from './EbookMark.jsx';
 
 export const BOOK_PALETTES = [
   ['#3a2a1a', '#f4ecd8', '#bfa15a'],
@@ -35,6 +36,12 @@ export default function BookCover({ book, title, author, cover_url, w = 110, h =
   const [bg, fg, accent] = p;
   const letter = resolvedTitle.trim()[0]?.toUpperCase() ?? '?';
 
+  /* Il segno d'angolo. Gli ebook lo portano ovunque compaia la loro copertina,
+     comprese quelle tipografiche generate qui sotto. Le opere d'arte usano lo
+     stesso componente in blu: basta togliere il confronto con 'ebook'. */
+  const tipo = tipoRecord(book);
+  const segno = tipo === 'ebook' ? <EbookMark tipo={tipo} larghezzaCopertina={w} /> : null;
+
   // Se esiste un'immagine reale, mostrala
   const imgUrl = book?.cover_local || book?.cover_url || cover_url;
   if (imgUrl && !imgUrl.startsWith('http://placeholder')) {
@@ -44,6 +51,7 @@ export default function BookCover({ book, title, author, cover_url, w = 110, h =
         style={{
           width: w, height: h, '--var-cover-bg': bg,
           cursor: onClick ? 'pointer' : 'default',
+          position: 'relative',
           /* Sfondo trasparente: con contain le "bande" sono invisibili */
           background: 'transparent',
           boxShadow: 'none',
@@ -66,6 +74,7 @@ export default function BookCover({ book, title, author, cover_url, w = 110, h =
           }}
           onError={e => { e.target.style.display = 'none'; }}
         />
+        {segno}
       </div>
     );
   }
@@ -87,6 +96,7 @@ export default function BookCover({ book, title, author, cover_url, w = 110, h =
             <div className="m-body" style={{ color: fg, opacity: .7, fontStyle: 'italic', fontSize: 10, marginTop: 6 }}>{resolvedAuthor}</div>
           </div>
         </div>
+        {segno}
       </div>
     );
   }
@@ -103,6 +113,7 @@ export default function BookCover({ book, title, author, cover_url, w = 110, h =
           <div className="m-serif" style={{ color: fg, fontSize: Math.max(10, w * 0.11), lineHeight: 1.1, fontWeight: 600, fontVariant: 'small-caps', letterSpacing: '.08em' }}>{resolvedTitle}</div>
           <div className="m-body" style={{ color: fg, opacity: .65, fontStyle: 'italic', fontSize: 9 }}>{resolvedAuthor}</div>
         </div>
+        {segno}
       </div>
     );
   }
@@ -128,6 +139,7 @@ export default function BookCover({ book, title, author, cover_url, w = 110, h =
           <div className="m-body" style={{ fontStyle: 'italic', fontSize: 9, opacity: .75 }}>{resolvedAuthor}</div>
         </div>
       </div>
+      {segno}
     </div>
   );
 }

@@ -3,6 +3,22 @@ import { useNavigate } from 'react-router-dom';
 import { shelves as shelvesApi, authors as authorsApi } from '../api/index.js';
 import { useToast } from '../components/Toast.jsx';
 
+const GRUPPI = [
+  ['fisico',   'Scaffali fisici',   'corrispondono a un gruppo reale sulla libreria'],
+  ['tematico', 'Scaffali tematici', 'esistono solo qui'],
+];
+
+/* "12 libri · 4 ebook · 2 opere" — le voci a zero non si scrivono. */
+function riepilogoTipi(shelf) {
+  const voci = [
+    [shelf.cartaceo_count ?? shelf.book_count ?? 0, 'libro', 'libri'],
+    [shelf.ebook_count ?? 0, 'ebook', 'ebook'],
+    [shelf.opera_count ?? 0, 'opera', 'opere'],
+  ].filter(([n]) => n > 0);
+  if (!voci.length) return 'vuoto';
+  return voci.map(([n, sing, plur]) => `${n} ${n === 1 ? sing : plur}`).join(' · ');
+}
+
 /* ─── ShelfContextMenu ──────────────────────────────────────────────────────── */
 function ShelfContextMenu({ x, y, shelf, onClose, onEdit, onDelete }) {
   const ref = useRef(null);
@@ -171,6 +187,7 @@ export default function Scaffali() {
   const [creating, setCreating] = useState(false);
   const [newName,  setNewName]  = useState('');
   const [newSub,   setNewSub]   = useState('');
+  const [newKind,  setNewKind]  = useState('tematico');
 
   const [tolkienCount, setTolkienCount] = useState(null);
 
@@ -195,7 +212,7 @@ export default function Scaffali() {
   async function createShelf() {
     if (!newName.trim()) return;
     try {
-      const s = await shelvesApi.create({ name: newName.trim(), subtitle: newSub.trim() });
+      const s = await shelvesApi.create({ name: newName.trim(), subtitle: newSub.trim(), kind: newKind });
       setShelves(prev => [...prev, { ...s, book_count: 0 }]);
       setCreating(false); setNewName(''); setNewSub('');
       toast('Scaffale creato', 'success');
@@ -307,16 +324,30 @@ export default function Scaffali() {
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
-          {shelves.map(s => (
-            <ShelfCard
-              key={s.id}
-              shelf={s}
-              onClick={() => navigate(`/scaffali/${s.id}`)}
-              onContextMenu={e => openContextMenu(e, s)}
-            />
-          ))}
+        {GRUPPI.map(([tipo, titolo, spiega]) => {
+          const gruppo = shelves.filter(x => (x.kind || 'tematico') === tipo);
+          if (!gruppo.length) return null;
+          return (
+            <div key={tipo} style={{ marginBottom: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
+                <div className="m-eyebrow" style={{ fontSize: 10 }}>{titolo}</div>
+                <div className="m-marginalia" style={{ fontSize: 11 }}>{spiega}</div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
+                {gruppo.map(x => (
+                  <ShelfCard
+                    key={x.id}
+                    shelf={x}
+                    onClick={() => navigate(`/scaffali/${x.id}`)}
+                    onContextMenu={e => openContextMenu(e, x)}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
 
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
           {/* Card creazione */}
           {creating ? (
             <div style={{ border: '1px solid var(--m-rule-strong)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -331,6 +362,15 @@ export default function Scaffali() {
                 className="m-input" placeholder="Sottotitolo (opzionale)" value={newSub}
                 onChange={e => setNewSub(e.target.value)}
               />
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[['tematico', '◇ tematico', 'esiste solo nell’app'],
+                  ['fisico',   '▦ fisico',   'corrisponde a un gruppo reale sulla libreria']].map(([v, etichetta, spiega]) => (
+                  <button key={v} type="button" title={spiega}
+                    onClick={() => setNewKind(v)}
+                    className={newKind === v ? 'm-btn m-btn-sm' : 'm-btn m-btn-ghost m-btn-sm'}
+                    style={{ fontSize: 11, flex: 1, justifyContent: 'center' }}>{etichetta}</button>
+                ))}
+              </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                 <button className="m-btn" onClick={createShelf}>crea</button>
                 <button className="m-btn m-btn-ghost" onClick={() => { setCreating(false); setNewName(''); setNewSub(''); }}>annulla</button>
@@ -428,7 +468,7 @@ function ShelfCard({ shelf, onClick, onContextMenu }) {
       {/* Testo */}
       <div style={{ position: 'relative', zIndex: 1, padding: '16px 18px' }}>
         <div className="m-eyebrow" style={{ fontSize: 11, color: hasCover ? 'rgba(255,255,255,0.55)' : undefined }}>
-          {shelf.book_count} {shelf.book_count === 1 ? 'volume' : 'volumi'}
+          {riepilogoTipi(shelf)}
         </div>
         <div className="m-serif" style={{ fontSize: 22, fontWeight: 500, lineHeight: 1.1, marginTop: 5, color: hasCover ? '#fff' : undefined }}>
           {shelf.name}

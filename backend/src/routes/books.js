@@ -85,6 +85,17 @@ router.get('/', (req, res) => {
     }
   }
 
+  // Ricerca libera: titolo, sottotitolo, editore o nome dell'autore.
+  // Il parametro era già previsto ma non veniva applicato, così ogni
+  // ricerca restituiva l'intero catalogo.
+  if (search && search.trim()) {
+    where.push(`(b.title LIKE ? OR b.subtitle LIKE ? OR b.publisher LIKE ? OR EXISTS (
+      SELECT 1 FROM authors a3 JOIN book_authors ba3 ON a3.id = ba3.author_id
+       WHERE ba3.book_id = b.id AND a3.name LIKE ?))`);
+    const q = `%${search.trim()}%`;
+    params.push(q, q, q, q);
+  }
+
   const validSorts = {
     title: 'b.title', author: 'a_sort.name_sort', year: 'b.year',
     added_at: 'b.added_at', pages: 'b.pages', updated_at: 'b.updated_at'
@@ -200,6 +211,7 @@ router.post('/', (req, res) => {
 
   // Aggiorna FTS
   updateFts(db, id);
+  allineaTipoEbook(db, id);
 
   const book = db.prepare('SELECT * FROM books WHERE id = ?').get(id);
   res.status(201).json(enrichBook(db, book));
@@ -244,7 +256,10 @@ router.patch('/:id', (req, res) => {
       'volumes_count','copies_owned',
       'spine_condition','foxing','underlinings','missing_pages','binding_condition',
       'smell_notes','provenance','previous_owners','ex_libris','stamps','manuscript_notes',
-      'inscriptions','purchase_date','insurance_flag','insurance_value','insurance_policy'
+      'inscriptions','purchase_date','insurance_flag','insurance_value','insurance_policy',
+      // Tipo del record e riferimenti esterni
+      'item_type','ebook_server','ebook_external_id','ebook_url',
+      'artwork_place','artwork_date','artwork_technique','artwork_image'
     ];
 
     const updates = [];
@@ -270,6 +285,9 @@ router.patch('/:id', (req, res) => {
     updates.push("updated_at = datetime('now')");
     params.push(req.params.id);
     db.prepare(`UPDATE books SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+
+    // Un record salvato come ebook nella rilegatura è un ebook anche di tipo
+    allineaTipoEbook(db, req.params.id);
 
     // Aggiorna autori se forniti
     if (req.body.authors) {
@@ -419,6 +437,18 @@ router.post('/covers/download-missing', async (req, res) => {
 
   res.json({ total: books.length, downloaded, failed, errors });
 });
+
+/**
+ * Tiene allineati i due campi del tipo: format descrive la rilegatura,
+ * item_type è il tipo autoritativo. Chi salva un record come 'ebook' nella
+ * rilegatura intende un ebook, quindi lo diventa anche di tipo.
+ */
+function allineaTipoEbook(db, bookId) {
+  try {
+    db.prepare(`UPDATE books SET item_type = 'ebook'
+                 WHERE id = ? AND format = 'ebook' AND COALESCE(item_type, '') <> 'ebook'`).run(bookId);
+  } catch { /* colonna non ancora migrata: non è critico */ }
+}
 
 function updateFts(db, bookId) {
   try {

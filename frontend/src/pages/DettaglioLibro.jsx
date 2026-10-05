@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import BookCover from '../components/BookCover.jsx';
 import Stars from '../components/Stars.jsx';
-import { books as booksApi, notes as notesApi, loans as loansApi, authors as authorsApi, prices as pricesApi } from '../api/index.js';
+import { books as booksApi, notes as notesApi, loans as loansApi, authors as authorsApi, prices as pricesApi, shelves as shelvesApi } from '../api/index.js';
 import { useToast } from '../components/Toast.jsx';
 import dayjs from 'dayjs';
 
@@ -538,6 +538,8 @@ export default function DettaglioLibro() {
               × rimuovi copertina
             </button>
           )}
+
+          <PannelloScaffali bookId={id} onVai={sid => navigate(`/scaffali/${sid}`)} />
 
           {/* ── Valore stimato ── */}
           <div
@@ -1179,6 +1181,94 @@ function AddReadingForm({ bookId, onAdded }) {
       >
         Salva lettura
       </button>
+    </div>
+  );
+}
+
+
+/* ── Scaffali che ospitano questo record ──────────────────────────────────
+   Lo scaffale rimanda al record, non lo duplica: aggiungerlo o toglierlo
+   non cambia nulla in catalogo.                                           */
+function PannelloScaffali({ bookId, onVai }) {
+  const toast = useToast();
+  const [suoi, setSuoi] = useState([]);
+  const [tutti, setTutti] = useState([]);
+  const [scelta, setScelta] = useState(false);
+
+  const ricarica = React.useCallback(() => {
+    shelvesApi.ofBook(bookId).then(setSuoi).catch(() => setSuoi([]));
+  }, [bookId]);
+
+  useEffect(() => { ricarica(); }, [ricarica]);
+  useEffect(() => { shelvesApi.list().then(setTutti).catch(() => {}); }, []);
+
+  const disponibili = tutti.filter(s => !suoi.some(x => x.id === s.id));
+
+  async function aggiungi(scaffale) {
+    setScelta(false);
+    try {
+      await shelvesApi.addBook(scaffale.id, bookId);
+      ricarica();
+      toast(`Aggiunto a "${scaffale.name}"`, 'success');
+    } catch (e) {
+      toast(e?.response?.data?.error || 'Non sono riuscito ad aggiungerlo', 'error');
+    }
+  }
+
+  const etichetta = {
+    fontFamily: "'Cinzel', serif", textTransform: 'uppercase',
+    letterSpacing: '0.22em', fontSize: 9, fontWeight: 500,
+    color: 'rgba(232,220,192,0.5)',
+  };
+
+  return (
+    <div style={{ marginTop: 20, width: '100%' }}>
+      <div style={{ ...etichetta, textAlign: 'center', marginBottom: 8 }}>Scaffali</div>
+
+      {suoi.length === 0 && (
+        <div className="m-marginalia" style={{ fontSize: 12, textAlign: 'center', opacity: 0.6 }}>
+          su nessuno scaffale
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {suoi.map(s => (
+          <button key={s.id} onClick={() => onVai(s.id)}
+            className="m-btn m-btn-ghost m-btn-sm"
+            style={{ fontSize: 12, justifyContent: 'space-between', width: '100%' }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+            <span style={{ opacity: 0.55, fontSize: 10, flexShrink: 0, marginLeft: 8 }}>
+              {(s.kind || 'tematico') === 'fisico' ? 'fisico' : 'tematico'}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {!scelta && disponibili.length > 0 && (
+        <button className="m-btn m-btn-ghost m-btn-sm" onClick={() => setScelta(true)}
+          style={{ fontSize: 11, width: '100%', justifyContent: 'center', marginTop: 6 }}>
+          + aggiungi a scaffale
+        </button>
+      )}
+
+      {scelta && (
+        <div style={{ marginTop: 6, border: '1px solid var(--cine-border)', maxHeight: 200, overflowY: 'auto' }}>
+          {disponibili.map(s => (
+            <div key={s.id} onClick={() => aggiungi(s)}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(216,180,106,0.10)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              style={{ padding: '7px 10px', cursor: 'pointer', fontSize: 12.5,
+                       fontFamily: "'Agmena Pro', Georgia, serif", color: 'var(--cine-cream)' }}>
+              {s.name}
+            </div>
+          ))}
+          <div onClick={() => setScelta(false)}
+            style={{ padding: '6px 10px', fontSize: 11, textAlign: 'center', cursor: 'pointer',
+                     color: 'rgba(232,220,192,0.5)', borderTop: '1px solid var(--cine-border)' }}>
+            annulla
+          </div>
+        </div>
+      )}
     </div>
   );
 }

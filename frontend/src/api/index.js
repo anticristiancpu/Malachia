@@ -53,8 +53,22 @@ export const shelves = {
   create:    (data)    => api.post('/shelves', data).then(r => r.data),
   update:    (id, data)=> api.patch(`/shelves/${id}`, data).then(r => r.data),
   delete:    (id)      => api.delete(`/shelves/${id}`).then(r => r.data),
-  addBook:   (id, book_id) => api.post(`/shelves/${id}/books`, { book_id }).then(r => r.data),
+  // opzioni: { section_id, after_book_id } — senza after_book_id va in coda
+  addBook:   (id, book_id, opzioni = {}) =>
+    api.post(`/shelves/${id}/books`, { book_id, ...opzioni }).then(r => r.data),
   removeBook:(id, bookId)  => api.delete(`/shelves/${id}/books/${bookId}`).then(r => r.data),
+  // riordino dentro lo scaffale: after_book_id null = in testa
+  moveBook:  (id, bookId, { after_book_id = null, section_id } = {}) =>
+    api.patch(`/shelves/${id}/books/${bookId}`,
+      section_id !== undefined ? { after_book_id, section_id } : { after_book_id }).then(r => r.data),
+  // sposta ('move') o copia ('copy') su un altro scaffale
+  transfer:  (id, bookId, target_shelf_id, mode = 'move') =>
+    api.post(`/shelves/${id}/books/${bookId}/transfer`, { target_shelf_id, mode }).then(r => r.data),
+  ofBook:    (bookId) => api.get(`/shelves/of-book/${bookId}`).then(r => r.data),
+  // sezioni dentro uno scaffale
+  addSection:    (id, name)          => api.post(`/shelves/${id}/sections`, { name }).then(r => r.data),
+  updateSection: (id, sid, data)     => api.patch(`/shelves/${id}/sections/${sid}`, data).then(r => r.data),
+  deleteSection: (id, sid)           => api.delete(`/shelves/${id}/sections/${sid}`).then(r => r.data),
   uploadImage: (id, file) => {
     const fd = new FormData(); fd.append('image', file);
     return api.post(`/shelves/${id}/image`, fd).then(r => r.data);
