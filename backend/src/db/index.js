@@ -87,6 +87,38 @@ function runMigrations() {
 
     // "Nuovi acquisti" non fa più parte della collocazione: quei volumi tornano da collocare
     "UPDATE books SET placement_id = NULL WHERE placement_id = 'nuovi-acquisti'",
+
+    // Specchio locale del gestore ebook esterno (BookOrbit). È di sola lettura:
+    // viene riempito dalla sincronizzazione e non torna mai indietro al server.
+    // Non contiene indirizzi completi: i link si costruiscono al momento.
+    `CREATE TABLE IF NOT EXISTS bookorbit_items (
+       id INTEGER PRIMARY KEY,
+       title TEXT,
+       subtitle TEXT,
+       authors TEXT,
+       publisher TEXT,
+       year INTEGER,
+       isbn13 TEXT,
+       isbn10 TEXT,
+       language TEXT,
+       pages INTEGER,
+       series_name TEXT,
+       series_index TEXT,
+       genres TEXT,
+       library_name TEXT,
+       file_id INTEGER,
+       file_format TEXT,
+       has_cover INTEGER DEFAULT 0,
+       remote_updated_at TEXT,
+       book_id TEXT REFERENCES books(id) ON DELETE SET NULL,
+       stato TEXT DEFAULT 'da_vedere',
+       visto_at TEXT,
+       created_at TEXT DEFAULT (datetime('now')),
+       updated_at TEXT DEFAULT (datetime('now'))
+     )`,
+    'CREATE INDEX IF NOT EXISTS idx_bookorbit_book ON bookorbit_items(book_id)',
+    'CREATE INDEX IF NOT EXISTS idx_bookorbit_stato ON bookorbit_items(stato)',
+    'CREATE INDEX IF NOT EXISTS idx_bookorbit_isbn13 ON bookorbit_items(isbn13)',
   ];
   for (const m of migrations) {
     try { db.exec(m); } catch {}

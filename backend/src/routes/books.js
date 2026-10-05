@@ -33,7 +33,34 @@ function enrichBook(db, book, { full = true } = {}) {
   const loans = db.prepare(
     'SELECT * FROM loans WHERE book_id = ? AND active = 1 ORDER BY loan_date DESC LIMIT 1'
   ).get(book.id);
-  return { ...base, reading_history: readingHistory, active_loan: loans || null };
+  return {
+    ...base,
+    reading_history: readingHistory,
+    active_loan: loans || null,
+    ebook_collegato: ebookCollegato(db, book.id),
+  };
+}
+
+// Riferimento all'ebook in BookOrbit, se questo record ne ha uno confermato.
+// I link si costruiscono qui, al momento, da BOOKORBIT_URL e dal fileId più
+// recente dello specchio: così non si rompono se il file viene sostituito o
+// se cambia l'indirizzo del server.
+function ebookCollegato(db, bookId) {
+  try {
+    const r = db.prepare(`SELECT id, stato, file_id, file_format, library_name
+        FROM bookorbit_items WHERE book_id = ?`).get(bookId);
+    if (!r) return null;
+    const bo = require('../bookorbit/client');
+    return {
+      bookorbit_id: r.id,
+      stato: r.stato,
+      orfano: r.stato === 'orfano',
+      formato: r.file_format,
+      libreria: r.library_name,
+      link_scheda: bo.linkScheda(r.id),
+      link_lettore: bo.linkLettore(r.id, r.file_id),
+    };
+  } catch { return null; } // specchio non ancora creato: non è un problema
 }
 
 function safeJson(val, fallback) {

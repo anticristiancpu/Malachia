@@ -25,6 +25,7 @@ import Impostazioni      from './pages/Impostazioni.jsx';
 import CollezioneTolkien from './pages/CollezioneTolkien.jsx';
 import Desiderata        from './pages/Desiderata.jsx';
 import Collocazione      from './pages/Collocazione.jsx';
+import Ebook             from './pages/Ebook.jsx';
 import Sistema           from './pages/Sistema.jsx';
 
 /* ── Motore slideshow ────────────────────────────────────────────────── */
@@ -123,6 +124,7 @@ export default function App() {
               <Route path="/editori"            element={<Editori />} />
               <Route path="/note"               element={<Note />} />
               <Route path="/collocazione"       element={<Collocazione />} />
+              <Route path="/ebook"              element={<Ebook />} />
               <Route path="/sistema"            element={<Sistema />} />
               <Route path="/scaffali"           element={<Scaffali />} />
               <Route path="/scaffali/:id"       element={<DettaglioScaffale />} />

@@ -105,6 +105,24 @@ router.get('/', (req, res) => {
   })));
 });
 
+/* ── GET /api/shelves/ebook-senza-scaffale — ebook non ancora collocati ────
+   I record di tipo ebook che non stanno su nessuno scaffale. Da qui si possono
+   aggiungere direttamente a uno scaffale e a una sezione.                    */
+router.get('/ebook-senza-scaffale', (req, res) => {
+  const db = getDb();
+  const righe = db.prepare(`
+    SELECT b.id, b.title, b.subtitle, b.year, b.publisher, b.cover_local, b.cover_url,
+           b.item_type, b.format, b.ebook_external_id,
+           (SELECT GROUP_CONCAT(a.name, ', ') FROM authors a
+              JOIN book_authors ba ON a.id = ba.author_id
+             WHERE ba.book_id = b.id) AS autori
+      FROM books b
+     WHERE ${È_EBOOK}
+       AND NOT EXISTS (SELECT 1 FROM shelf_books sb WHERE sb.book_id = b.id)
+     ORDER BY b.title COLLATE NOCASE`).all();
+  res.json(righe);
+});
+
 /* ── GET /api/shelves/of-book/:bookId — in quali scaffali sta un record ──── */
 router.get('/of-book/:bookId', (req, res) => {
   const db = getDb();

@@ -541,6 +541,8 @@ export default function DettaglioLibro() {
 
           <PannelloScaffali bookId={id} onVai={sid => navigate(`/scaffali/${sid}`)} />
 
+          <AncheInEbook ebook={book.ebook_collegato} />
+
           {/* ── Valore stimato ── */}
           <div
             onClick={() => setShowValoreModal(true)}
@@ -1267,6 +1269,57 @@ function PannelloScaffali({ bookId, onVai }) {
                      color: 'rgba(232,220,192,0.5)', borderTop: '1px solid var(--cine-border)' }}>
             annulla
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── "anche in ebook" ───────────────────────────────────────────────────────
+   Indicazione discreta per un record cartaceo che ha anche una copia in
+   BookOrbit. Il segno nell'angolo della copertina resta riservato ai record
+   che SONO ebook: qui non deve comparire.
+   I link arrivano già composti dal backend, a partire da BOOKORBIT_URL e dal
+   file più recente, così non si rompono se il file viene sostituito.        */
+function AncheInEbook({ ebook }) {
+  if (!ebook) return null;
+  return (
+    <div style={{
+      marginTop: 14, paddingTop: 12,
+      borderTop: '1px solid rgba(191,161,88,0.25)',
+    }}>
+      <div style={{
+        fontFamily: "'Cinzel', serif", textTransform: 'uppercase',
+        letterSpacing: '0.22em', fontSize: 9, fontWeight: 500,
+        color: 'rgba(232,220,192,0.5)', marginBottom: 6,
+      }}>
+        Anche in ebook
+      </div>
+
+      {ebook.orfano ? (
+        <div style={{
+          fontFamily: "'Agmena Pro', 'EB Garamond', Georgia, serif",
+          fontSize: 12, fontStyle: 'italic', color: '#d9816c', lineHeight: 1.4,
+        }}>
+          Non è più presente in BookOrbit. Il record qui non è stato modificato.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{
+            fontFamily: "'Agmena Pro', 'EB Garamond', Georgia, serif",
+            fontSize: 12.5, color: 'rgba(232,220,192,0.62)', fontStyle: 'italic',
+          }}>
+            {ebook.formato ? ebook.formato.toUpperCase() : 'ebook'}
+            {ebook.libreria ? ` · ${ebook.libreria}` : ''}
+          </span>
+          {ebook.link_lettore && (
+            <a href={ebook.link_lettore} target="_blank" rel="noreferrer" style={{
+              fontFamily: "'Cinzel', serif", textTransform: 'uppercase',
+              letterSpacing: '0.14em', fontSize: 9, color: 'var(--cine-gold)',
+              textDecoration: 'none', borderBottom: '1px solid rgba(191,161,88,0.4)',
+              paddingBottom: 1,
+            }}>Apri in BookOrbit ↗</a>
+          )}
         </div>
       )}
     </div>

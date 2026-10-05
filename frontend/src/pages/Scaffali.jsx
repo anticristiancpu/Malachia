@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { shelves as shelvesApi, authors as authorsApi } from '../api/index.js';
 import { useToast } from '../components/Toast.jsx';
@@ -398,6 +398,12 @@ export default function Scaffali() {
         </div>
       </section>
 
+      {/* ─── Ebook senza scaffale ──────────────────────────────────────────── */}
+      <EbookSenzaScaffale
+        shelves={shelves}
+        onAggiunto={() => shelvesApi.list().then(setShelves).catch(() => {})}
+      />
+
       {/* ─── Context menu tasto destro ─── */}
       {ctxMenu && (
         <ShelfContextMenu
@@ -494,5 +500,107 @@ function ShelfCard({ shelf, onClick, onContextMenu }) {
         fontSize: 18, color: hasCover ? 'rgba(255,255,255,0.35)' : 'var(--m-ink-muted)',
       }}>›</div>
     </div>
+  );
+}
+
+/* ── Ebook senza scaffale ───────────────────────────────────────────────────
+   I record di tipo ebook che non stanno su nessuno scaffale. Da qui si
+   aggiungono direttamente a uno scaffale e, se ne ha, a una sua sezione.   */
+function EbookSenzaScaffale({ shelves, onAggiunto }) {
+  const toast = useToast();
+  const [righe, setRighe]   = useState([]);
+  const [aperto, setAperto] = useState(false);
+  const [sezioni, setSezioni] = useState({});   // { [shelfId]: [sezioni] }
+  const [scelte, setScelte]   = useState({});   // { [bookId]: { shelf, sezione } }
+  const [inCorso, setInCorso] = useState(null);
+
+  const carica = useCallback(() => {
+    shelvesApi.ebookSenzaScaffale().then(setRighe).catch(() => setRighe([]));
+  }, []);
+  useEffect(() => { carica(); }, [carica]);
+
+  // Le sezioni di uno scaffale si leggono solo quando serve.
+  const scegliScaffale = async (bookId, shelfId) => {
+    setScelte(s => ({ ...s, [bookId]: { shelf: shelfId, sezione: '' } }));
+    if (shelfId && !sezioni[shelfId]) {
+      try {
+        const sc = await shelvesApi.get(shelfId);
+        setSezioni(m => ({ ...m, [shelfId]: sc.sections || [] }));
+      } catch { setSezioni(m => ({ ...m, [shelfId]: [] })); }
+    }
+  };
+
+  if (!righe.length) return null;
+
+  return (
+    <section>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        <div className="m-eyebrow" style={{ fontSize: 12, letterSpacing: '0.08em' }}>Ebook senza scaffale</div>
+        <div style={{ flex: 1, height: 1, background: 'var(--cine-gold-dim)' }}/>
+        <div className="m-marginalia" style={{ fontSize: 12 }}>{righe.length}</div>
+        <button className="m-btn m-btn-ghost m-btn-sm" style={{ fontSize: 11 }}
+          onClick={() => setAperto(a => !a)}>{aperto ? 'nascondi' : 'mostra'}</button>
+      </div>
+
+      {aperto && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {!shelves.length && (
+            <div className="m-marginalia" style={{ fontSize: 12 }}>
+              Crea prima uno scaffale, poi potrai collocarli.
+            </div>
+          )}
+          {righe.map(r => {
+            const scelta = scelte[r.id] || {};
+            const elenco = sezioni[scelta.shelf] || [];
+            return (
+              <div key={r.id} style={{
+                border: '1px solid var(--m-rule)', padding: '7px 10px',
+                display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
+              }}>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <div className="m-serif" style={{ fontSize: 13.5, lineHeight: 1.2 }}>{r.title}</div>
+                  <div className="m-marginalia" style={{ fontSize: 11 }}>
+                    {r.autori || 'senza autore'}{r.year ? ` · ${r.year}` : ''}
+                  </div>
+                </div>
+                <select value={scelta.shelf || ''} disabled={!shelves.length}
+                  onChange={e => scegliScaffale(r.id, e.target.value)}
+                  style={{
+                    fontSize: 12, padding: '4px 6px', background: 'transparent',
+                    color: 'var(--m-ink)', border: '1px solid var(--m-rule)', minWidth: 150,
+                  }}>
+                  <option value="">— scaffale —</option>
+                  {shelves.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                <select value={scelta.sezione || ''} disabled={!scelta.shelf || !elenco.length}
+                  onChange={e => setScelte(m => ({ ...m, [r.id]: { ...scelta, sezione: e.target.value } }))}
+                  style={{
+                    fontSize: 12, padding: '4px 6px', background: 'transparent',
+                    color: 'var(--m-ink)', border: '1px solid var(--m-rule)', minWidth: 130,
+                  }}>
+                  <option value="">{elenco.length ? '— senza sezione —' : 'nessuna sezione'}</option>
+                  {elenco.map(sz => <option key={sz.id} value={sz.id}>{sz.name}</option>)}
+                </select>
+                <button className="m-btn m-btn-sm" style={{ fontSize: 11 }}
+                  disabled={!scelta.shelf || inCorso === r.id}
+                  onClick={async () => {
+                    setInCorso(r.id);
+                    try {
+                      await shelvesApi.addBook(scelta.shelf, r.id,
+                        scelta.sezione ? { section_id: scelta.sezione } : {});
+                      toast('aggiunto allo scaffale', 'success');
+                      setRighe(prev => prev.filter(x => x.id !== r.id));
+                      onAggiunto?.();
+                    } catch { toast('non è stato possibile aggiungerlo', 'error'); }
+                    finally { setInCorso(null); }
+                  }}>
+                  {inCorso === r.id ? '…' : 'aggiungi'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }

@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { path: '/editori',    label: 'Editori',  icon: '⊕', end: true },
   { path: '/scaffali',   label: 'Scaffali',   icon: '⊟' },
   { path: '/collocazione', label: 'Collocazione', icon: '▤' },
+  { path: '/ebook',        label: 'Ebook',        icon: '◱' },
   { path: '/sistema',      label: 'Sistema',      icon: '❦' },
   { path: '/desiderata', label: 'Desiderata', icon: '♡' },
   { path: '/note',       label: 'Note',       icon: '✎' },

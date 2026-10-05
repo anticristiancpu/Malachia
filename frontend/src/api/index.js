@@ -74,6 +74,25 @@ export const shelves = {
     return api.post(`/shelves/${id}/image`, fd).then(r => r.data);
   },
   deleteImage: (id) => api.delete(`/shelves/${id}/image`).then(r => r.data),
+  // ebook di tipo ebook che non stanno su nessuno scaffale
+  ebookSenzaScaffale: () => api.get('/shelves/ebook-senza-scaffale').then(r => r.data),
+};
+
+// Ebook in BookOrbit. Di là si legge soltanto; qui si scrive solo su conferma.
+export const bookorbit = {
+  status:     ()        => api.get('/bookorbit/status').then(r => r.data),
+  // anteprima: dice cosa cambierebbe senza scrivere niente
+  sync:       ({ anteprima = false } = {}) =>
+    api.post(`/bookorbit/sync${anteprima ? '?anteprima=1' : ''}`).then(r => r.data),
+  proposals:  ()        => api.get('/bookorbit/proposals').then(r => r.data),
+  items:      (params)  => api.get('/bookorbit/items', { params }).then(r => r.data),
+  // abbinamenti: [{ bookorbit_id, book_id }] — vale per uno o per molti
+  link:       (abbinamenti) => api.post('/bookorbit/link', { abbinamenti }).then(r => r.data),
+  unlink:     (ids)     => api.post('/bookorbit/unlink', { ids }).then(r => r.data),
+  ignore:     (ids)     => api.post('/bookorbit/ignore', { ids }).then(r => r.data),
+  restore:    (ids)     => api.post('/bookorbit/restore', { ids }).then(r => r.data),
+  create:     (ids, { anteprima = false } = {}) =>
+    api.post('/bookorbit/create', { ids, anteprima }).then(r => r.data),
 };
 
 export const wishlist = {
