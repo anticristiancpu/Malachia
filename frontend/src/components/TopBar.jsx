@@ -95,6 +95,7 @@ export default function TopBar() {
   const navigate = useNavigate();
   const location = useLocation();
   const [totalBooks, setTotalBooks] = useState(null);
+  const [totalFisici, setTotalFisici] = useState(null);
   const [totalValue, setTotalValue] = useState(null);
   const [openDropdown, setOpenDropdown] = useState(null);
   const closeTimerRef = useRef(null);
@@ -102,6 +103,7 @@ export default function TopBar() {
   const fetchStats = useCallback(() => {
     stats.get().then(s => {
       setTotalBooks(s.total_books ?? null);
+      setTotalFisici(s.total_books_fisici ?? null);
       setTotalValue(s.total_market_value ?? null);
     }).catch(() => {});
   }, []);
@@ -199,9 +201,18 @@ export default function TopBar() {
       </nav>
 
       <div className="cine-topbar-right">
-        <div className="cine-counter" title="Volumi in collezione">
+        {/* Quanti record in tutto e, di quelli, quanti sono di carta. */}
+        <div className="cine-counter"
+          title={totalFisici != null
+            ? `${totalBooks} record in tutto, di cui ${totalFisici} di carta e ${totalBooks - totalFisici} ebook`
+            : 'Volumi in collezione'}>
           <BookIcon />
           <span className="cine-counter-num">{totalBooks ?? '—'}</span>
+          {totalFisici != null && totalFisici !== totalBooks && (
+            <span className="cine-counter-num" style={{ opacity: 0.55, marginLeft: 5 }}>
+              / {totalFisici}
+            </span>
+          )}
         </div>
         <div className="cine-counter" title="Valore stimato">
           <EuroIcon />

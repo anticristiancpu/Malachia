@@ -167,7 +167,9 @@ function Proposta({ p, livello, scelto, onSpunta, onConferma, onIgnora, onAMano,
   const unico = p.candidati.length === 1 ? p.candidati[0] : null;
   const [scelta, setScelta] = useState(unico?.id || null);
   const candidato = p.candidati.find(c => c.id === scelta) || null;
-  const selezionabile = livello === 'probabile' || livello === 'verificare';
+  // La casella serve ovunque: dove c'è un candidato per confermare in blocco,
+  // dove non c'è per escludere in blocco quelli che non devono entrare.
+  const senzaCandidati = p.candidati.length === 0;
 
   return (
     <div style={{
@@ -175,12 +177,12 @@ function Proposta({ p, livello, scelto, onSpunta, onConferma, onIgnora, onAMano,
       display: 'flex', gap: 12, alignItems: 'flex-start',
       background: scelto ? 'rgba(191,161,88,0.10)' : 'transparent',
     }}>
-      {selezionabile && (
-        <input type="checkbox" checked={scelto} disabled={!candidato}
-          onChange={ev => onSpunta(e.id, ev.target.checked, scelta)}
-          title={candidato ? 'seleziona per confermare in blocco' : 'scegli prima un candidato'}
-          style={{ marginTop: 20, accentColor: 'var(--cine-gold)', cursor: 'pointer' }}/>
-      )}
+      <input type="checkbox" checked={scelto}
+        onChange={ev => onSpunta(e.id, ev.target.checked, senzaCandidati ? null : scelta)}
+        title={senzaCandidati
+          ? 'seleziona per escludere in blocco'
+          : (candidato ? 'seleziona per confermare o escludere in blocco' : 'seleziona per escludere; per confermare scegli prima un candidato')}
+        style={{ marginTop: 20, accentColor: 'var(--cine-gold)', cursor: 'pointer' }}/>
 
       {/* l'ebook */}
       <div style={{ display: 'flex', gap: 8, flex: 1, minWidth: 0 }}>
@@ -371,11 +373,26 @@ export default function Ebook() {
     catch { toast?.('operazione non riuscita', 'error'); }
   };
 
+  /* Una spunta vale sempre: il libro abbinato c'è solo quando è stato scelto.
+     Senza di lui si può comunque escludere. */
   const spunta = (idEbook, attivo, idLibro) => setSpunte(s => {
     const n = { ...s };
-    if (attivo && idLibro) n[idEbook] = idLibro; else delete n[idEbook];
+    if (attivo) n[idEbook] = idLibro || null; else delete n[idEbook];
     return n;
   });
+
+  /* Escludere: gli ebook selezionati finiscono fra gli ignorati e spariscono
+     dalle proposte. Si possono sempre rimettere dalla scheda "Ignorati". */
+  const escludiSelezionati = () => {
+    const ids = Object.keys(spunte).map(Number);
+    if (!ids.length) { toast?.('nessuno selezionato', 'error'); return; }
+    setConferma({
+      titolo: ids.length === 1 ? 'Escludi questo ebook' : `Escludi ${ids.length} ebook`,
+      righe: [[ids.length, 'ebook che non verranno importati']],
+      nota: 'Restano in BookOrbit e nell’elenco locale: spariscono solo dalle proposte. Li ritrovi nella scheda “Ignorati”.',
+      azione: async () => { await boApi.ignore(ids); await dopo(`${ids.length} esclusi`); },
+    });
+  };
 
   if (caricando) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
@@ -394,6 +411,7 @@ export default function Ebook() {
     return tutte.filter(p => (filtroAutore === 'noto' ? p.autore_noto : !p.autore_noto));
   };
   const nSpunte = Object.keys(spunte).length;
+  const nAbbinabili = Object.values(spunte).filter(Boolean).length;
   const schede = [
     ...LIVELLI.map(([k, nome, spiega]) => [k, nome, spiega, c[k] || 0]),
     ['collegati', 'Collegati', 'già abbinati a un record', collegati.length],
@@ -491,19 +509,17 @@ export default function Ebook() {
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <button className="m-btn m-btn-sm" disabled={lavorando || !nSpunte}
                 onClick={() => confermaBlocco(
-                  Object.entries(spunte).map(([e, b]) => ({ bookorbit_id: Number(e), book_id: b })),
-                  `Conferma ${nSpunte} abbinamenti selezionati`)}>
-                conferma i {nSpunte || ''} selezionati
+                  Object.entries(spunte).filter(([, b]) => b)
+                    .map(([e, b]) => ({ bookorbit_id: Number(e), book_id: b })),
+                  `Conferma ${nAbbinabili} abbinamenti selezionati`)}>
+                conferma i {nAbbinabili || ''} selezionati
               </button>
               <button className="m-btn m-btn-ghost m-btn-sm" disabled={lavorando}
                 onClick={() => {
                   const tutti = {};
-                  for (const p of proposte[scheda]) if (p.candidati.length === 1) tutti[p.ebook.id] = p.candidati[0].id;
+                  for (const p of righeScheda(scheda)) if (p.candidati.length === 1) tutti[p.ebook.id] = p.candidati[0].id;
                   setSpunte(tutti);
                 }}>seleziona tutti quelli con un solo candidato</button>
-              {nSpunte > 0 && (
-                <button className="m-btn m-btn-ghost m-btn-sm" onClick={() => setSpunte({})}>azzera</button>
-              )}
             </div>
           )}
           {scheda === 'nessuno' && c.nessuno > 0 && (
@@ -539,6 +555,29 @@ export default function Ebook() {
                   con copertina e autori già in catalogo dove coincidono
                 </span>
               </div>
+            </div>
+          )}
+
+          {/* escludere vale su ogni scheda delle proposte */}
+          {LIVELLI.some(([k]) => k === scheda) && righeScheda(scheda).length > 0 && (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button className="m-btn m-btn-ghost m-btn-sm" disabled={lavorando || !nSpunte}
+                onClick={escludiSelezionati}>
+                escludi i {nSpunte || ''} selezionati
+              </button>
+              <button className="m-btn m-btn-ghost m-btn-sm" disabled={lavorando}
+                onClick={() => {
+                  const tutti = {};
+                  for (const p of righeScheda(scheda)) {
+                    tutti[p.ebook.id] = p.candidati.length === 1 ? p.candidati[0].id : null;
+                  }
+                  setSpunte(tutti);
+                }}>seleziona tutti quelli mostrati</button>
+              {nSpunte > 0 && (
+                <button className="m-btn m-btn-ghost m-btn-sm" onClick={() => setSpunte({})}>
+                  azzera selezione
+                </button>
+              )}
             </div>
           )}
 

@@ -75,6 +75,7 @@ router.get('/', (req, res) => {
     status, genre_id, author_id, shelf_id, format,
     language, year_from, year_to, rating_min, rating_max,
     tags, search, signed, favorite, active_loan, no_market_value,
+    item_type, escludi_ebook,
     sort = 'added_at', dir = 'desc',
     page = 1, limit = 50
   } = req.query;
@@ -95,6 +96,16 @@ router.get('/', (req, res) => {
   }
   if (no_market_value === '1') {
     where.push('(b.market_value IS NULL OR b.market_value = 0)');
+  }
+  // Tipo del record. 'ebook' guarda anche la rilegatura, perché un record
+  // importato prima della Fase 1 può averlo segnato solo lì.
+  if (item_type === 'ebook') {
+    where.push("(COALESCE(b.item_type,'cartaceo') = 'ebook' OR b.format = 'ebook')");
+  } else if (item_type) {
+    where.push("COALESCE(b.item_type,'cartaceo') = ?"); params.push(item_type);
+  }
+  if (escludi_ebook === '1') {
+    where.push("(COALESCE(b.item_type,'cartaceo') <> 'ebook' AND COALESCE(b.format,'') <> 'ebook')");
   }
   if (author_id) {
     where.push('EXISTS (SELECT 1 FROM book_authors ba WHERE ba.book_id = b.id AND ba.author_id = ?)');

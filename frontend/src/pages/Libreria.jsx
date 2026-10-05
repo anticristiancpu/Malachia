@@ -294,7 +294,8 @@ function FiltriOption({ label, active, onClick }) {
 }
 
 /* ── FiltriPopover ───────────────────────────────────────────────────────────── */
-function FiltriPopover({ popoverRef, rect, status, onStatus, filterFormat, onFilterFormat, filterLang, onFilterLang, noValueCount }) {
+function FiltriPopover({ popoverRef, rect, status, onStatus, filterFormat, onFilterFormat,
+                        filterLang, onFilterLang, filterTipo, onFilterTipo, noValueCount }) {
   const sectionLabel = {
     display: 'block',
     fontFamily: "'Cinzel', serif", textTransform: 'uppercase',
@@ -325,6 +326,12 @@ function FiltriPopover({ popoverRef, rect, status, onStatus, filterFormat, onFil
       />
 
       <div style={{ borderTop: '1px solid rgba(216,180,106,0.12)', marginTop: 4 }}/>
+      <span style={sectionLabel}>Tipo</span>
+      <FiltriOption label="Tutto"          active={filterTipo === ''}         onClick={() => onFilterTipo('')}/>
+      <FiltriOption label="Solo di carta"  active={filterTipo === 'cartaceo'} onClick={() => onFilterTipo('cartaceo')}/>
+      <FiltriOption label="Solo ebook"     active={filterTipo === 'ebook'}    onClick={() => onFilterTipo('ebook')}/>
+
+      <div style={{ borderTop: '1px solid rgba(216,180,106,0.12)', marginTop: 4 }}/>
       <span style={sectionLabel}>Formato</span>
       <FiltriOption label="Tutti i formati" active={filterFormat === ''} onClick={() => onFilterFormat('')}/>
       {FORMAT_OPTIONS.map(o => (
@@ -340,11 +347,11 @@ function FiltriPopover({ popoverRef, rect, status, onStatus, filterFormat, onFil
           active={filterLang === o.value} onClick={() => onFilterLang(o.value)}/>
       ))}
 
-      {(status || filterFormat || filterLang) && (
+      {(status || filterFormat || filterLang || filterTipo) && (
         <>
           <div style={{ borderTop: '1px solid rgba(216,180,106,0.12)', marginTop: 4 }}/>
           <div
-            onClick={() => { onStatus(''); onFilterFormat(''); onFilterLang(''); }}
+            onClick={() => { onStatus(''); onFilterFormat(''); onFilterLang(''); onFilterTipo(''); }}
             onMouseEnter={e => { e.currentTarget.style.color = 'var(--cine-gold)'; }}
             onMouseLeave={e => { e.currentTarget.style.color = 'rgba(216,180,106,0.65)'; }}
             style={{
@@ -436,10 +443,11 @@ function MenuItem({ icon, label, danger, onClick, disabled }) {
 /* ─── BookContextMenu ───────────────────────────────────────────────────────── */
 function BookContextMenu({
   x, y, book, shelves, shelfIds,
-  onToggle, onClose, onNavigate, onEdit, onDelete,
+  onToggle, onClose, onNavigate, onEdit, onDelete, onCreaScaffale,
 }) {
   const ref = useRef(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [nuovoNome, setNuovoNome] = useState(null);   // null = non sto creando
   const [pos, setPos] = useState({ left: x, top: y });
 
   useEffect(() => {
@@ -520,7 +528,7 @@ function BookContextMenu({
           Scaffali
         </div>
         <div style={{ maxHeight: 220, overflowY: 'auto' }}>
-          {shelves.length === 0 ? (
+          {shelves.length === 0 && nuovoNome === null ? (
             <div style={{ padding: '8px 14px', fontSize: 12, color: 'var(--m-ink-muted)', fontStyle: 'italic' }}>
               Nessuno scaffale creato
             </div>
@@ -558,6 +566,34 @@ function BookContextMenu({
             );
           })}
         </div>
+
+        {/* Senza scaffali il menu sarebbe un vicolo cieco: se ne crea uno qui. */}
+        {nuovoNome === null ? (
+          <div
+            onClick={() => setNuovoNome('')}
+            style={{ padding: '7px 14px', cursor: 'pointer', fontSize: 12.5, color: 'var(--m-ink-muted)' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--m-rule)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >+ nuovo scaffale</div>
+        ) : (
+          <div style={{ padding: '7px 14px 9px' }}>
+            <input
+              autoFocus value={nuovoNome}
+              onChange={ev => setNuovoNome(ev.target.value)}
+              onKeyDown={ev => {
+                if (ev.key === 'Enter' && nuovoNome.trim()) { onCreaScaffale(nuovoNome.trim(), book); setNuovoNome(null); }
+                if (ev.key === 'Escape') setNuovoNome(null);
+              }}
+              placeholder="nome dello scaffale"
+              style={{
+                width: '100%', padding: '5px 7px', fontSize: 12.5, fontFamily: 'inherit',
+                background: 'transparent', color: 'var(--m-ink)', border: '1px solid var(--m-rule)',
+              }}/>
+            <div className="m-marginalia" style={{ fontSize: 10.5, marginTop: 4 }}>
+              Invio per crearlo e metterci questo libro.
+            </div>
+          </div>
+        )}
       </div>
 
       <div style={{ borderTop: '1px solid var(--m-rule)', padding: '5px 8px' }}>
@@ -1007,6 +1043,10 @@ export default function Libreria() {
   );
   const [filterFormat, setFilterFormat] = useState(sessionSnap.filterFormat ?? '');
   const [filterLang,   setFilterLang]   = useState(sessionSnap.filterLang   ?? '');
+  // Tipo di record: tutto, solo quelli di carta, solo gli ebook.
+  const [filterTipo,   setFilterTipo]   = useState(
+    sessionSnap.filterTipo ?? localStorage.getItem('malachia-tipo') ?? ''
+  );
   const [noValueCount, setNoValueCount] = useState(null);
   const [totalAll,     setTotalAll]     = useState(0);
   const [shelves,      setShelves]      = useState([]);
@@ -1064,6 +1104,7 @@ export default function Libreria() {
   function handleSetView(v)   { setView(v);   localStorage.setItem('malachia-view',   v); }
   function handleSetStatus(s) { setStatus(s); localStorage.setItem('malachia-status', s); }
   function handleSetSort(s)   { setSort(s);   localStorage.setItem('malachia-sort',   s); }
+  function handleSetTipo(t)   { setFilterTipo(t); localStorage.setItem('malachia-tipo', t); }
 
   /* ── Data loading ── */
   useEffect(() => { shelvesApi.list().then(setShelves).catch(() => {}); }, []);
@@ -1095,15 +1136,15 @@ export default function Libreria() {
     _libScroll = document.querySelector('.cine-main')?.scrollTop ?? 0;
     _libBooks  = books;
     sessionStorage.setItem('malachia-libreria-state', JSON.stringify({
-      status, sort, filterFormat, filterLang,
+      status, sort, filterFormat, filterLang, filterTipo,
     }));
     navigate(`/libro/${bookId}`, { state: { from: 'libreria' } });
-  }, [navigate, books, status, sort, filterFormat, filterLang]);
+  }, [navigate, books, status, sort, filterFormat, filterLang, filterTipo]);
 
   const load = useCallback(() => {
     const dir       = (sort === 'title' || sort === 'author') ? 'asc' : 'desc';
     const isNoValue = status === 'no_value';
-    const key = JSON.stringify({ status, sort, filterFormat, filterLang });
+    const key = JSON.stringify({ status, sort, filterFormat, filterLang, filterTipo });
     // Se abbiamo già questi risultati, mostrali subito (niente spinner) e aggiorna in background.
     const cached = _libCache.get(key);
     if (cached) { setBooks(cached.books); setTotal(cached.total); setLoading(false); }
@@ -1114,13 +1155,15 @@ export default function Libreria() {
       sort, dir, page: 1, limit: 50000,
       format:   filterFormat || undefined,
       language: filterLang   || undefined,
+      escludi_ebook: filterTipo === 'cartaceo' ? '1' : undefined,
+      item_type:     filterTipo === 'ebook'    ? 'ebook' : undefined,
     })
       .then(r => {
         _libCache.set(key, { books: r.books, total: r.total });
         setBooks(r.books); setTotal(r.total); setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [status, sort, filterFormat, filterLang]);
+  }, [status, sort, filterFormat, filterLang, filterTipo]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -1154,6 +1197,18 @@ export default function Libreria() {
         toast(`"${book.title}" aggiunto a "${shelf.name}"`, 'success');
       }
     } catch { toast('Errore', 'error'); }
+  }
+
+  /* Creare uno scaffale dal menu e metterci subito il libro: senza questo,
+     con zero scaffali il menu non porterebbe da nessuna parte. */
+  async function creaScaffaleEAggiungi(nome, book) {
+    try {
+      const nuovo = await shelvesApi.create({ name: nome });
+      await shelvesApi.addBook(nuovo.id, book.id);
+      setShelves(prev => [...prev, { ...nuovo, book_count: 1 }]);
+      setContextMenu(c => c ? { ...c, shelfIds: new Set([...c.shelfIds, nuovo.id]) } : c);
+      toast(`"${book.title}" in "${nome}"`, 'success');
+    } catch { toast('Non è stato possibile creare lo scaffale', 'error'); }
   }
 
   async function handleEditBook(book, data) {
@@ -1237,6 +1292,7 @@ export default function Libreria() {
           status={status}           onStatus={handleSetStatus}
           filterFormat={filterFormat} onFilterFormat={setFilterFormat}
           filterLang={filterLang}    onFilterLang={setFilterLang}
+          filterTipo={filterTipo}    onFilterTipo={handleSetTipo}
           noValueCount={noValueCount}
         />
       )}
@@ -1257,6 +1313,7 @@ export default function Libreria() {
           onToggle={toggleShelf}   onClose={() => setContextMenu(null)}
           onNavigate={handleNavigateToBook} onEdit={book => setEditBook(book)}
           onDelete={handleDeleteBook}
+          onCreaScaffale={creaScaffaleEAggiungi}
         />
       )}
 

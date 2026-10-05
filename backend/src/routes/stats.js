@@ -319,9 +319,23 @@ router.get('/', (req, res) => {
     GROUP BY borrower_name ORDER BY count DESC LIMIT 5
   `);
 
+  /* Quanti sono di carta e quanti ebook. La rilegatura vale quanto il tipo: un
+     record importato prima della Fase 1 può averlo segnato solo lì.
+     Si conta con la stessa formula del totale — volumi per copie, wishlist
+     esclusa — altrimenti i due numeri non starebbero sulla stessa scala. */
+  const È_EBOOK = "(COALESCE(item_type,'cartaceo') = 'ebook' OR format = 'ebook')";
+  const perTipo = (condizione) => qOne(db, `
+    SELECT COALESCE(SUM(COALESCE(volumes_count,1) * COALESCE(copies_owned,1)), 0) AS n
+    FROM books WHERE status != 'wishlist' AND ${condizione}
+  `)?.n || 0;
+  const totalEbook       = perTipo(È_EBOOK);
+  const totalBooksFisici = perTipo(`NOT ${È_EBOOK}`);
+
   res.json({
     // Libreria
     total_books:             totalBooks,
+    total_books_fisici:      totalBooksFisici,
+    total_ebook:             totalEbook,
     total_pages_collection:  totalPagesCollection,
     avg_pages:               avgPages,
     books_with_location:     booksWithLocation,

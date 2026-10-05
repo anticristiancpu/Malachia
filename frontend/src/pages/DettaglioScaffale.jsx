@@ -331,7 +331,7 @@ export default function DettaglioScaffale() {
   const fisico = (scaffale.kind || 'tematico') === 'fisico';
 
   return (
-    <div style={{ padding: '26px 40px 70px', maxWidth: 1100 }}>
+    <div style={{ padding: '26px 40px 70px' }}>
 
       {/* ── Intestazione ── */}
       <button className="m-btn m-btn-ghost m-btn-sm" onClick={() => navigate('/scaffali')}
