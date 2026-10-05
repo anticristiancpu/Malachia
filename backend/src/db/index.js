@@ -5,6 +5,49 @@ require('dotenv').config({ path: path.join(__dirname, '../../../.env') });
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../../data/malachia.db');
 
+// Versione dello schema. Va alzata di uno ogni volta che si aggiunge una
+// migrazione: è questo numero a dire se c'è davvero qualcosa da applicare,
+// e quindi se serve un backup prima di toccare il database.
+const VERSIONE_SCHEMA = 4;
+
+// Quante copie di sicurezza tenere accanto al database.
+const BACKUP_DA_TENERE = 5;
+
+/* Copia il database accanto a sé stesso, con data e ora nel nome, e tiene
+   solo le ultime BACKUP_DA_TENERE. Solleva se non ci riesce: senza una copia
+   buona le migrazioni non devono partire. */
+function backupPrimaDelleMigrazioni(versioneAttuale) {
+  const ora = new Date();
+  const p = (n, c = 2) => String(n).padStart(c, '0');
+  const stampo = `${ora.getFullYear()}${p(ora.getMonth() + 1)}${p(ora.getDate())}`
+               + `-${p(ora.getHours())}${p(ora.getMinutes())}${p(ora.getSeconds())}`;
+  const destinazione = `${DB_PATH}.backup-${stampo}`;
+
+  // Il WAL va riversato nel file principale, altrimenti la copia è parziale.
+  db.pragma('wal_checkpoint(TRUNCATE)');
+  fs.copyFileSync(DB_PATH, destinazione);
+
+  const copiato = fs.statSync(destinazione).size;
+  if (copiato === 0) throw new Error('la copia risulta vuota');
+  console.log(`  ✦ Backup prima delle migrazioni: ${path.basename(destinazione)}`
+            + ` (${(copiato / 1048576).toFixed(1)} MB, schema ${versioneAttuale} → ${VERSIONE_SCHEMA})`);
+
+  // Via le copie più vecchie, tenendo le ultime per nome (il nome è cronologico).
+  try {
+    const cartella = path.dirname(DB_PATH);
+    const prefisso = `${path.basename(DB_PATH)}.backup-`;
+    const vecchie = fs.readdirSync(cartella)
+      .filter(f => f.startsWith(prefisso))
+      .sort()
+      .slice(0, -BACKUP_DA_TENERE);
+    for (const f of vecchie) fs.unlinkSync(path.join(cartella, f));
+    if (vecchie.length) console.log(`  ✦ Rimosse ${vecchie.length} copie più vecchie`);
+  } catch (e) {
+    // Non essere riusciti a fare pulizia non è un motivo per fermarsi.
+    console.warn('  Copie vecchie non rimosse:', e.message);
+  }
+}
+
 let db;
 
 function getDb() {
@@ -32,7 +75,28 @@ function initSchema() {
       }
     }
   }
+  const versione = db.pragma('user_version', { simple: true });
+  if (versione >= VERSIONE_SCHEMA) return;   // niente da applicare: non si tocca niente
+
+  // Un database appena creato non ha niente da salvare.
+  const daSalvare = db.prepare('SELECT COUNT(*) AS n FROM books').get().n > 0;
+  if (daSalvare) {
+    try {
+      backupPrimaDelleMigrazioni(versione);
+    } catch (e) {
+      console.error('');
+      console.error('  ✗ Backup del database non riuscito:', e.message);
+      console.error(`    File: ${DB_PATH}`);
+      console.error("    Le migrazioni NON sono state applicate: il database e' rimasto");
+      console.error("    com'era. Libera spazio o correggi i permessi sulla cartella,");
+      console.error('    poi riavvia.');
+      console.error('');
+      throw new Error('migrazioni interrotte: backup del database non riuscito');
+    }
+  }
+
   runMigrations();
+  db.pragma(`user_version = ${VERSIONE_SCHEMA}`);
 }
 
 function runMigrations() {
@@ -119,6 +183,10 @@ function runMigrations() {
     'CREATE INDEX IF NOT EXISTS idx_bookorbit_book ON bookorbit_items(book_id)',
     'CREATE INDEX IF NOT EXISTS idx_bookorbit_stato ON bookorbit_items(stato)',
     'CREATE INDEX IF NOT EXISTS idx_bookorbit_isbn13 ON bookorbit_items(isbn13)',
+
+    // L'indice full-text non è mai stato interrogato: la ricerca usa LIKE.
+    // Lo eliminiamo invece di continuare a tenerlo allineato.
+    'DROP TABLE IF EXISTS books_fts',
   ];
   for (const m of migrations) {
     try { db.exec(m); } catch {}
@@ -146,36 +214,6 @@ function runMigrations() {
   // rilegatura viene riconosciuto anche come tipo.
   try { db.exec("UPDATE books SET item_type = 'cartaceo' WHERE item_type IS NULL OR item_type = ''"); } catch {}
   try { db.exec("UPDATE books SET item_type = 'ebook' WHERE format = 'ebook' AND COALESCE(item_type,'') <> 'ebook'"); } catch {}
-
-  // L'indice di ricerca può restare indietro (import che non lo aggiornano).
-  // Lo ricostruiamo solo quando i conteggi non coincidono: è autoriparante.
-  try {
-    const libri = db.prepare('SELECT COUNT(*) AS n FROM books').get().n;
-    const indicizzati = db.prepare('SELECT COUNT(*) AS n FROM books_fts').get().n;
-    if (libri !== indicizzati) {
-      const righe = db.prepare(`
-        SELECT b.id, b.title, b.subtitle, b.original_title, b.publisher, b.synopsis,
-               b.personal_notes, b.tags, b.isbn10, b.isbn13,
-               (SELECT GROUP_CONCAT(a.name, ' ') FROM authors a
-                  JOIN book_authors ba ON a.id = ba.author_id WHERE ba.book_id = b.id) AS author_names
-        FROM books b`).all();
-      const ins = db.prepare(`INSERT INTO books_fts
-        (id, title, subtitle, original_title, author_names, publisher, synopsis, personal_notes, tags, isbn10, isbn13)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
-      db.transaction(() => {
-        // Una tabella FTS5 senza contenuto si svuota solo con questo comando
-        db.exec("INSERT INTO books_fts(books_fts) VALUES('delete-all')");
-        for (const r of righe) {
-          ins.run(r.id, r.title || '', r.subtitle || '', r.original_title || '', r.author_names || '',
-                  r.publisher || '', r.synopsis || '', r.personal_notes || '', r.tags || '',
-                  r.isbn10 || '', r.isbn13 || '');
-        }
-      })();
-      console.log(`  ✦ Indice di ricerca riallineato: ${indicizzati} → ${righe.length} voci`);
-    }
-  } catch (e) {
-    console.warn('  Indice di ricerca non riallineato:', e.message);
-  }
 
   // Ricalcola name_sort con l'algoritmo aggiornato (particelle nobiliari)
   try {

@@ -270,6 +270,7 @@ export default function Ebook() {
   const [spunte, setSpunte] = useState({});          // { [idEbook]: idLibro }
   const [aMano, setAMano] = useState(null);
   const [conferma, setConferma] = useState(null);
+  const [filtroAutore, setFiltroAutore] = useState('tutti'); // tutti | noto | nuovo
   const [collegati, setCollegati] = useState([]);
   const [ignorati, setIgnorati] = useState([]);
 
@@ -383,6 +384,15 @@ export default function Ebook() {
   );
 
   const c = proposte?.conteggi || {};
+
+  /* Nella scheda "senza corrispondenza" si può restringere agli ebook di un
+     autore che hai già: è lì che si nasconde la stessa opera in un'altra
+     lingua, da collegare a mano. */
+  const righeScheda = (chiave) => {
+    const tutte = proposte?.[chiave] || [];
+    if (chiave !== 'nessuno' || filtroAutore === 'tutti') return tutte;
+    return tutte.filter(p => (filtroAutore === 'noto' ? p.autore_noto : !p.autore_noto));
+  };
   const nSpunte = Object.keys(spunte).length;
   const schede = [
     ...LIVELLI.map(([k, nome, spiega]) => [k, nome, spiega, c[k] || 0]),
@@ -451,7 +461,7 @@ export default function Ebook() {
         <>
           <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--cine-gold-dim)', flexWrap: 'wrap' }}>
             {schede.map(([k, nome, spiega, n]) => (
-              <div key={k} onClick={() => { setScheda(k); setSpunte({}); }} title={spiega} style={{
+              <div key={k} onClick={() => { setScheda(k); setSpunte({}); setFiltroAutore('tutti'); }} title={spiega} style={{
                 padding: '8px 16px', cursor: 'pointer',
                 borderBottom: scheda === k ? '2px solid var(--cine-gold)' : '2px solid transparent',
                 color: scheda === k ? 'var(--cine-cream)' : 'var(--cine-gold-dim)',
@@ -497,26 +507,50 @@ export default function Ebook() {
             </div>
           )}
           {scheda === 'nessuno' && c.nessuno > 0 && (
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <button className="m-btn m-btn-sm" disabled={lavorando}
-                onClick={() => crea(proposte.nessuno.map(p => p.ebook.id))}>
-                crea tutti come nuovi ebook
-              </button>
-              <span className="m-marginalia" style={{ fontSize: 12 }}>
-                {c.nessuno} record nuovi, con copertina e autori già in catalogo dove coincidono
-              </span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span className="m-eyebrow" style={{ fontSize: 10 }}>Autore</span>
+                {[
+                  ['tutti', 'tutti', c.nessuno],
+                  ['noto',  'già presente in catalogo', c.nessuno_autore_noto],
+                  ['nuovo', 'autore nuovo', c.nessuno_autore_nuovo],
+                ].map(([k, nome, n]) => (
+                  <button key={k} className={`m-btn m-btn-sm${filtroAutore === k ? '' : ' m-btn-ghost'}`}
+                    style={{ fontSize: 11 }}
+                    onClick={() => { setFiltroAutore(k); setSpunte({}); }}>
+                    {nome} <span className="m-nums" style={{ opacity: 0.7 }}>{n ?? 0}</span>
+                  </button>
+                ))}
+              </div>
+              {filtroAutore === 'noto' && (
+                <div className="m-marginalia" style={{ fontSize: 12 }}>
+                  Di questi hai già l’autore ma non l’opera. Qui può nascondersi lo stesso
+                  libro in un’altra lingua: usa <em>collega a mano</em> invece di crearne uno nuovo.
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <button className="m-btn m-btn-sm" disabled={lavorando || !righeScheda('nessuno').length}
+                  onClick={() => crea(righeScheda('nessuno').map(p => p.ebook.id))}>
+                  {filtroAutore === 'tutti'
+                    ? 'crea tutti come nuovi ebook'
+                    : `crea i ${righeScheda('nessuno').length} mostrati come nuovi ebook`}
+                </button>
+                <span className="m-marginalia" style={{ fontSize: 12 }}>
+                  con copertina e autori già in catalogo dove coincidono
+                </span>
+              </div>
             </div>
           )}
 
           {/* elenco */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {LIVELLI.some(([k]) => k === scheda) && (proposte[scheda] || []).map(p => (
+            {LIVELLI.some(([k]) => k === scheda) && righeScheda(scheda).map(p => (
               <Proposta key={p.ebook.id} p={p} livello={scheda}
                 scelto={Boolean(spunte[p.ebook.id])}
                 onSpunta={spunta} onConferma={conferma1} onIgnora={ignora}
                 onAMano={setAMano} onCrea={crea}/>
             ))}
-            {LIVELLI.some(([k]) => k === scheda) && !(proposte[scheda] || []).length && (
+            {LIVELLI.some(([k]) => k === scheda) && !righeScheda(scheda).length && (
               <div className="m-marginalia" style={{ fontSize: 13, padding: '18px 0' }}>niente in questa scheda</div>
             )}
 

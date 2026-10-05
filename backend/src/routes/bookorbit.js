@@ -11,8 +11,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db');
 const cliente = require('../bookorbit/client');
-const { proponi, indicizzaCatalogo, norm } = require('../bookorbit/match');
-const { updateFts } = require('./books');
+const { proponi, indicizzaCatalogo, norm, autoreGiaNoto } = require('../bookorbit/match');
 
 const UPLOADS_DIR = path.join(__dirname, '../../../uploads/covers');
 const SERVER = 'bookorbit';
@@ -171,10 +170,13 @@ router.get('/proposals', (req, res) => {
 
   const livelli = { certo: [], probabile: [], verificare: [], nessuno: [] };
   for (const r of daVedere) {
-    const { livello, candidati } = proponi({ ...r, authors: comeJson(r.authors, []) }, indice);
+    const autori = comeJson(r.authors, []);
+    const { livello, candidati } = proponi({ ...r, authors: autori }, indice);
     livelli[livello].push({
       ebook: vestiRiga(r),
       candidati: candidati.map(c => vestiCandidato(db, c)),
+      // per i "senza corrispondenza": l'autore ce l'hai già oppure è nuovo?
+      autore_noto: autoreGiaNoto(autori, indice),
     });
   }
 
@@ -184,6 +186,8 @@ router.get('/proposals', (req, res) => {
       probabile: livelli.probabile.length,
       verificare: livelli.verificare.length,
       nessuno: livelli.nessuno.length,
+      nessuno_autore_noto: livelli.nessuno.filter(p => p.autore_noto).length,
+      nessuno_autore_nuovo: livelli.nessuno.filter(p => !p.autore_noto).length,
     },
     ...livelli,
   });
@@ -417,7 +421,6 @@ router.post('/create', async (req, res) => {
       }
       collega.run(bookId, r.id);
     })();
-    updateFts(db, bookId);
     creati.push({ bookorbit_id: r.id, book_id: bookId, title: r.title });
   }
 

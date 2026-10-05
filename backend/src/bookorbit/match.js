@@ -69,7 +69,17 @@ function indicizzaCatalogo(db) {
     if (r._titoloPieno !== r._titoloSolo) spingi(perTitolo, r._titoloPieno, r);
     spingi(perNucleo, r._nucleo, r);
   }
-  return { righe, perIsbn, perTitolo, perNucleo };
+  // Tutti i cognomi presenti in catalogo: serve a dire, per un ebook senza
+  // corrispondenza, se almeno il suo autore lo abbiamo già.
+  const cognomiNoti = new Set();
+  for (const r of righe) for (const c of r._cognomi) cognomiNoti.add(c);
+
+  return { righe, perIsbn, perTitolo, perNucleo, cognomiNoti };
+}
+
+// Vero se almeno uno degli autori dell'ebook è già in catalogo.
+function autoreGiaNoto(autori, indice) {
+  return (autori || []).map(cognome).some(c => c && indice.cognomiNoti.has(c));
 }
 
 // ── proposta per un singolo ebook ──────────────────────────────────────────
@@ -128,5 +138,5 @@ function proponiTutti(db, ebooks) {
 
 module.exports = {
   norm, nucleo, isbnPulito, cognome,
-  indicizzaCatalogo, proponi, proponiTutti,
+  indicizzaCatalogo, proponi, proponiTutti, autoreGiaNoto,
 };

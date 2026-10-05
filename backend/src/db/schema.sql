@@ -267,12 +267,3 @@ CREATE INDEX IF NOT EXISTS idx_notes_book ON notes(book_id);
 CREATE INDEX IF NOT EXISTS idx_loans_active ON loans(active);
 CREATE INDEX IF NOT EXISTS idx_reading_history_book ON reading_history(book_id);
 
--- FTS5 per ricerca full-text
-CREATE VIRTUAL TABLE IF NOT EXISTS books_fts USING fts5(
-  id UNINDEXED,
-  title, subtitle, original_title, author_names,
-  publisher, synopsis, personal_notes, tags,
-  isbn10, isbn13,
-  content='',
-  tokenize='unicode61'
-);

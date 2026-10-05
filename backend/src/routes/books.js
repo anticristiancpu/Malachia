@@ -237,7 +237,6 @@ router.post('/', (req, res) => {
   }
 
   // Aggiorna FTS
-  updateFts(db, id);
   allineaTipoEbook(db, id);
 
   const book = db.prepare('SELECT * FROM books WHERE id = ?').get(id);
@@ -339,7 +338,6 @@ router.patch('/:id', (req, res) => {
       } catch {}
     }
 
-    updateFts(db, req.params.id);
     try {
       res.json(enrichBook(db, db.prepare('SELECT * FROM books WHERE id = ?').get(req.params.id)));
     } catch {
@@ -477,20 +475,4 @@ function allineaTipoEbook(db, bookId) {
   } catch { /* colonna non ancora migrata: non è critico */ }
 }
 
-function updateFts(db, bookId) {
-  try {
-    const book = db.prepare('SELECT * FROM books WHERE id = ?').get(bookId);
-    if (!book) return;
-    const authors = db.prepare(`SELECT a.name FROM authors a JOIN book_authors ba ON a.id = ba.author_id WHERE ba.book_id = ?`).all(bookId);
-    const authorNames = authors.map(a => a.name).join(' ');
-    db.prepare("DELETE FROM books_fts WHERE id = ?").run(bookId);
-    db.prepare(`INSERT INTO books_fts (id, title, subtitle, original_title, author_names, publisher, synopsis, personal_notes, tags, isbn10, isbn13)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?)`
-    ).run(bookId, book.title, book.subtitle||'', book.original_title||'', authorNames,
-      book.publisher||'', book.synopsis||'', book.personal_notes||'',
-      book.tags||'', book.isbn10||'', book.isbn13||'');
-  } catch(e) { /* FTS non critico */ }
-}
-
 module.exports = router;
-module.exports.updateFts = updateFts;
