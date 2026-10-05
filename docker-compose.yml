@@ -10,6 +10,13 @@ services:
     environment:
       NODE_ENV: production
       BACKEND_PORT: "3001"
+      # BookOrbit, per la sezione Ebook. Mettili in un file .env qui accanto:
+      # docker compose lo legge da solo e le credenziali restano fuori da git.
+      # Senza queste variabili tutto il resto funziona: solo la pagina Ebook
+      # avvisa che il server non e' configurato.
+      BOOKORBIT_URL: "${BOOKORBIT_URL:-}"
+      BOOKORBIT_USERNAME: "${BOOKORBIT_USERNAME:-}"
+      BOOKORBIT_PASSWORD: "${BOOKORBIT_PASSWORD:-}"
     volumes:
       # Database SQLite attuale (con WAL/SHM) — dati persistenti
       - ./data:/app/data
