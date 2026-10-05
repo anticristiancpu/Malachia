@@ -39,6 +39,34 @@ function righeScaffale(db, shelfId) {
   `).all(shelfId);
 }
 
+/* Attacca a ogni record il riferimento al suo ebook, se ne ha uno confermato.
+   I link si compongono qui, da BOOKORBIT_URL e dal file piu' recente dello
+   specchio: non sono salvati e non si rompono se il file viene sostituito. */
+function conEbook(db, righe) {
+  let perLibro = new Map();
+  try {
+    for (const r of db.prepare(
+      'SELECT id, book_id, file_id, stato FROM bookorbit_items WHERE book_id IS NOT NULL'
+    ).all()) perLibro.set(r.book_id, r);
+  } catch { return righe; }   // specchio non ancora creato
+  if (!perLibro.size) return righe;
+
+  const bo = require('../bookorbit/client');
+  return righe.map(b => {
+    const e = perLibro.get(b.id);
+    if (!e) return b;
+    return {
+      ...b,
+      ebook: {
+        bookorbit_id: e.id,
+        orfano: e.stato === 'orfano',
+        link_scheda: bo.linkScheda(e.id),
+        link_lettore: bo.linkLettore(e.id, e.file_id),
+      },
+    };
+  });
+}
+
 /* Rinumera una sezione a 10, 20, 30… quando lo spazio fra due vicini si esaurisce. */
 function rinumera(db, shelfId, sectionId) {
   const righe = db.prepare(`
@@ -145,8 +173,14 @@ router.get('/:id', (req, res) => {
     WHERE shelf_id = ? ORDER BY position IS NULL, position, created_at
   `).all(req.params.id);
 
-  const books = righeScaffale(db, req.params.id);
-  res.json({ ...shelf, kind: shelf.kind || 'tematico', sections, books });
+  const books = conEbook(db, righeScaffale(db, req.params.id));
+  res.json({
+    ...shelf,
+    kind: shelf.kind || 'tematico',
+    view_mode: shelf.view_mode || 'elenco',
+    cover_height: shelf.cover_height || 130,
+    sections, books,
+  });
 });
 
 /* ── POST /api/shelves — crea ───────────────────────────────────────────── */
@@ -170,13 +204,24 @@ router.patch('/:id', (req, res) => {
   const attuale = db.prepare('SELECT * FROM shelves WHERE id = ?').get(req.params.id);
   if (!attuale) return res.status(404).json({ error: 'Scaffale non trovato' });
 
-  const { name, subtitle, description, kind, public: isPublic } = req.body;
-  db.prepare('UPDATE shelves SET name=?, subtitle=?, description=?, kind=?, public=? WHERE id=?').run(
+  const { name, subtitle, description, kind, public: isPublic,
+          view_mode, cover_height } = req.body;
+
+  // Altezza delle copertine: entro limiti ragionevoli, così un valore storto
+  // arrivato da fuori non rende la pagina illeggibile.
+  const altezza = cover_height !== undefined
+    ? Math.min(Math.max(parseInt(cover_height) || 130, 60), 300)
+    : (attuale.cover_height || 130);
+
+  db.prepare(`UPDATE shelves SET name=?, subtitle=?, description=?, kind=?, public=?,
+                                 view_mode=?, cover_height=? WHERE id=?`).run(
     name !== undefined ? name : attuale.name,
     subtitle !== undefined ? (subtitle || null) : attuale.subtitle,
     description !== undefined ? (description || null) : attuale.description,
     kind !== undefined ? (kind === 'fisico' ? 'fisico' : 'tematico') : (attuale.kind || 'tematico'),
     isPublic !== undefined ? (isPublic ? 1 : 0) : attuale.public,
+    view_mode !== undefined ? (view_mode === 'mensola' ? 'mensola' : 'elenco') : (attuale.view_mode || 'elenco'),
+    altezza,
     req.params.id
   );
   res.json(db.prepare('SELECT * FROM shelves WHERE id = ?').get(req.params.id));

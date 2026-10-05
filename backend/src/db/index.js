@@ -8,7 +8,7 @@ const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../../data/malac
 // Versione dello schema. Va alzata di uno ogni volta che si aggiunge una
 // migrazione: è questo numero a dire se c'è davvero qualcosa da applicare,
 // e quindi se serve un backup prima di toccare il database.
-const VERSIONE_SCHEMA = 4;
+const VERSIONE_SCHEMA = 5;
 
 // Quante copie di sicurezza tenere accanto al database.
 const BACKUP_DA_TENERE = 5;
@@ -187,6 +187,11 @@ function runMigrations() {
     // L'indice full-text non è mai stato interrogato: la ricerca usa LIKE.
     // Lo eliminiamo invece di continuare a tenerlo allineato.
     'DROP TABLE IF EXISTS books_fts',
+
+    // Come si guarda uno scaffale: a elenco o a mensola, e quanto grandi le
+    // copertine. Sono preferenze di ciascuno scaffale, non del browser.
+    "ALTER TABLE shelves ADD COLUMN view_mode TEXT DEFAULT 'elenco'",
+    'ALTER TABLE shelves ADD COLUMN cover_height INTEGER DEFAULT 130',
   ];
   for (const m of migrations) {
     try { db.exec(m); } catch {}

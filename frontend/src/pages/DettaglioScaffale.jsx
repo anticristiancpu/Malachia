@@ -4,6 +4,7 @@ import BookCover from '../components/BookCover.jsx';
 import { tipoRecord } from '../components/EbookMark.jsx';
 import { shelves as shelvesApi, books as booksApi } from '../api/index.js';
 import { useToast } from '../components/Toast.jsx';
+import VistaMensola from '../components/VistaMensola.jsx';
 
 /* ══════════════════════════════════════════════════════════════════════════
    Uno scaffale: i libri nell'ordine in cui dialogano fra loro.
@@ -193,10 +194,16 @@ export default function DettaglioScaffale() {
   const [sopra, setSopra]         = useState(null);   // riga sorvolata durante il trascinamento
   const [rinomino, setRinomino]   = useState(false);
   const [nomeTmp, setNomeTmp]     = useState('');
+  const [vista, setVista]         = useState('elenco');     // 'elenco' | 'mensola'
+  const [altezza, setAltezza]     = useState(130);          // altezza delle copertine
 
   const carica = useCallback(() => {
     return shelvesApi.get(id)
-      .then(s => setScaffale(s))
+      .then(s => {
+        setScaffale(s);
+        setVista(s.view_mode === 'mensola' ? 'mensola' : 'elenco');
+        setAltezza(s.cover_height || 130);
+      })
       .catch(() => { toast('Scaffale non trovato', 'error'); navigate('/scaffali'); })
       .finally(() => setCaric(false));
   }, [id, navigate, toast]);
@@ -279,6 +286,23 @@ export default function DettaglioScaffale() {
     } catch { toast('Errore nel riordino', 'error'); }
   }
 
+  /* La vista scelta e l'altezza restano con lo scaffale, non con il browser.
+     Il cursore scrive una volta sola quando ci si ferma. */
+  const salvaVista = useCallback((modo) => {
+    setVista(modo);
+    shelvesApi.update(id, { view_mode: modo }).catch(() => {});
+  }, [id]);
+
+  const attesaAltezza = useRef(null);
+  const salvaAltezza = useCallback((valore) => {
+    setAltezza(valore);
+    clearTimeout(attesaAltezza.current);
+    attesaAltezza.current = setTimeout(() => {
+      shelvesApi.update(id, { cover_height: valore }).catch(() => {});
+    }, 500);
+  }, [id]);
+  useEffect(() => () => clearTimeout(attesaAltezza.current), []);
+
   async function salvaNome() {
     const v = nomeTmp.trim();
     setRinomino(false);
@@ -344,10 +368,71 @@ export default function DettaglioScaffale() {
         </div>
       </div>
 
-      <div style={{ height: 1, background: 'var(--m-rule)', margin: '20px 0 24px' }}/>
+      {/* ── Come guardare lo scaffale ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+        margin: '18px 0 6px',
+      }}>
+        <div style={{ display: 'flex', border: '1px solid var(--cine-gold-dim)' }}>
+          {[['elenco', 'Elenco'], ['mensola', 'Mensola']].map(([k, nome]) => (
+            <button key={k} onClick={() => salvaVista(k)}
+              style={{
+                padding: '5px 14px', cursor: 'pointer', border: 'none',
+                fontFamily: "'Cinzel', serif", textTransform: 'uppercase',
+                letterSpacing: '0.12em', fontSize: 10,
+                background: vista === k ? 'var(--cine-gold)' : 'transparent',
+                color: vista === k ? 'var(--cine-bg, #0a0704)' : 'var(--cine-gold-dim)',
+              }}>{nome}</button>
+          ))}
+        </div>
 
-      {/* ── Sezioni ── */}
-      {sezioni.map(sez => {
+        {vista === 'mensola' && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <span className="m-eyebrow" style={{ fontSize: 10 }}>Copertine</span>
+            <input
+              type="range" min="70" max="260" step="10" value={altezza}
+              onChange={e => salvaAltezza(Number(e.target.value))}
+              title="Altezza delle copertine"
+              style={{ width: 'min(190px, 42vw)', accentColor: 'var(--cine-gold)', cursor: 'pointer' }}/>
+            <span className="m-nums" style={{ fontSize: 11, opacity: 0.6, minWidth: 34 }}>{altezza}px</span>
+          </label>
+        )}
+      </div>
+
+      <div style={{ height: 1, background: 'var(--m-rule)', margin: '12px 0 24px' }}/>
+
+      {/* ── Mensola: le copertine in fila su un ripiano ── */}
+      {vista === 'mensola' && (
+        <>
+          <VistaMensola
+            sezioni={sezioni} perSezione={perSezione} sezioneBase={SEZIONE_BASE}
+            altezza={altezza}
+            trascinato={trascinato} sopra={sopra}
+            onTrascinaInizio={setTrasc}
+            onTrascinaFine={() => { setTrasc(null); setSopra(null); }}
+            onSorvola={setSopra}
+            onEsci={chiave => setSopra(x => (x === chiave ? null : x))}
+            onRilascia={rilascia}
+            onApri={bid => navigate(`/libro/${bid}`)}
+            onMenu={(e, b, sezId) => {
+              e.preventDefault();
+              setMenu({ x: e.clientX, y: e.clientY, libro: b, sezione: sezId });
+            }}
+            onInserisci={(sezId, dopoId) => setPunto({ sectionId: sezId, afterBookId: dopoId })}
+          />
+          {punto && (
+            <AggiuntaRapida giaPresenti={presenti} onScegli={inserisci} onChiudi={() => setPunto(null)}/>
+          )}
+          {libri.length === 0 && (
+            <div className="m-marginalia" style={{ fontStyle: 'italic', fontSize: 12.5 }}>
+              Scaffale vuoto. Passa all’elenco per aggiungere i primi volumi.
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── Elenco ── */}
+      {vista === 'elenco' && sezioni.map(sez => {
         const righe = perSezione[sez.id] || [];
         const base = sez.id === SEZIONE_BASE;
         return (
