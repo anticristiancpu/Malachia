@@ -93,6 +93,10 @@ export const bookorbit = {
   restore:    (ids)     => api.post('/bookorbit/restore', { ids }).then(r => r.data),
   create:     (ids, { anteprima = false } = {}) =>
     api.post('/bookorbit/create', { ids, anteprima }).then(r => r.data),
+  // credenziali: la password si manda solo quando cambia, e non torna mai indietro
+  credenziali:        ()     => api.get('/bookorbit/credenziali').then(r => r.data),
+  salvaCredenziali:   (dati) => api.put('/bookorbit/credenziali', dati).then(r => r.data),
+  dimenticaCredenziali: ()   => api.delete('/bookorbit/credenziali').then(r => r.data),
 };
 
 export const wishlist = {

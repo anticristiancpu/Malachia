@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useContext, useCallback } from 'react';
-import { settings as settingsApi, authors as authorsApi, books as booksApi } from '../api/index.js';
+import { settings as settingsApi, authors as authorsApi, books as booksApi, bookorbit as boApi } from '../api/index.js';
 import { useToast } from '../components/Toast.jsx';
 import {
   applyGold, applyVermilion, applyOverlay, extractAccentFromImage,
@@ -853,6 +853,10 @@ export default function Impostazioni() {
             </div>
           </Sec>
 
+          <Sec title="Ebook — BookOrbit">
+            <CredenzialiBookOrbit />
+          </Sec>
+
           <Sec title="Ordine provider metadati">
             <div className="m-field">
               <label>Priorità <span style={{ opacity: 0.55, fontStyle: 'italic' }}>(virgola-separata)</span></label>
@@ -1058,5 +1062,114 @@ export default function Impostazioni() {
       </div>
 
     </div>
+  );
+}
+
+/* ── Credenziali BookOrbit ──────────────────────────────────────────────────
+   La password si può scrivere ma non si rilegge: il backend dice soltanto se
+   c'è. Lasciando il campo vuoto si salvano indirizzo e utente senza toccarla. */
+function CredenzialiBookOrbit() {
+  const [dati, setDati]       = useState(null);
+  const [url, setUrl]         = useState('');
+  const [utente, setUtente]   = useState('');
+  const [password, setPassword] = useState('');
+  const [esito, setEsito]     = useState(null);
+  const [inCorso, setInCorso] = useState(false);
+
+  const carica = useCallback(() => {
+    boApi.credenziali()
+      .then(d => { setDati(d); setUrl(d.url || ''); setUtente(d.username || ''); })
+      .catch(() => setDati({ url: '', username: '', password_impostata: false, origine: 'nessuna' }));
+  }, []);
+  useEffect(() => { carica(); }, [carica]);
+
+  const salva = async () => {
+    setInCorso(true); setEsito(null);
+    try {
+      const r = await boApi.salvaCredenziali({ url, username: utente, password });
+      setPassword('');                       // non la teniamo nemmeno in pagina
+      setDati(d => ({ ...d, ...r }));
+      setEsito(r.raggiungibile
+        ? { ok: true,  testo: `Collegato a BookOrbit come ${r.utente || utente}.` }
+        : { ok: false, testo: r.errore || 'Salvato, ma BookOrbit non risponde.' });
+    } catch (e) {
+      setEsito({ ok: false, testo: e?.response?.data?.error || 'Non è stato possibile salvare.' });
+    } finally { setInCorso(false); }
+  };
+
+  const dimentica = async () => {
+    setInCorso(true); setEsito(null);
+    try {
+      const r = await boApi.dimenticaCredenziali();
+      setPassword('');
+      setEsito({ ok: true, testo: r.origine === 'ambiente'
+        ? 'Dimenticate. Tornano a valere quelle del file .env del server.'
+        : 'Dimenticate. La sezione Ebook resta in attesa di configurazione.' });
+      carica();
+    } catch { setEsito({ ok: false, testo: 'Non è stato possibile dimenticarle.' }); }
+    finally { setInCorso(false); }
+  };
+
+  if (!dati) return <div className="m-spinner"/>;
+
+  const daAmbiente = dati.origine === 'ambiente';
+
+  return (
+    <>
+      <div style={{ padding: '10px 13px', border: '1px solid var(--cine-border)', background: 'rgba(232,220,192,0.03)', marginBottom: 12 }}>
+        <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--m-ink-soft)', margin: 0, fontFamily: "'EB Garamond', Georgia, serif" }}>
+          BookOrbit è un gestore ebook self-hosted. Malachia lo legge in sola lettura
+          e non vi scrive mai nulla. La password resta sul server: una volta salvata
+          non viene più restituita, nemmeno a questa pagina.
+          {daAmbiente && ' Al momento arrivano dal file .env del server: quello che scrivi qui ha la precedenza.'}
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="m-field">
+          <label>Indirizzo</label>
+          <input className="m-input" type="url" value={url}
+            onChange={e => setUrl(e.target.value)} placeholder="http://192.168.1.104:3000"/>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div className="m-field">
+            <label>Utente</label>
+            <input className="m-input" value={utente} onChange={e => setUtente(e.target.value)}
+              autoComplete="off"/>
+          </div>
+          <div className="m-field">
+            <label>Password</label>
+            <input className="m-input" type="password" value={password}
+              onChange={e => setPassword(e.target.value)} autoComplete="new-password"
+              placeholder={dati.password_impostata ? '•••••••• già impostata' : 'non impostata'}/>
+            <small className="m-marginalia">
+              {dati.password_impostata
+                ? 'Lascia vuoto per non cambiarla.'
+                : 'Senza password la sezione Ebook non può collegarsi.'}
+            </small>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="m-btn m-btn-sm" onClick={salva} disabled={inCorso}>
+            {inCorso ? '…' : 'salva e prova il collegamento'}
+          </button>
+          {(dati.origine === 'impostazioni') && (
+            <button className="m-btn m-btn-ghost m-btn-sm" onClick={dimentica} disabled={inCorso}>
+              dimentica le credenziali
+            </button>
+          )}
+        </div>
+
+        {esito && (
+          <div style={{
+            padding: '8px 12px', fontSize: 13,
+            border: `1px solid ${esito.ok ? 'rgba(122,170,138,0.45)' : 'rgba(192,57,43,0.45)'}`,
+            background: esito.ok ? 'rgba(122,170,138,0.08)' : 'rgba(192,57,43,0.08)',
+            color: esito.ok ? 'var(--m-ink-soft)' : '#d9816c',
+          }}>{esito.testo}</div>
+        )}
+      </div>
+    </>
   );
 }

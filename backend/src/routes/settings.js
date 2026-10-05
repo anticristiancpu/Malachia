@@ -10,12 +10,20 @@ function ensureBgDir() {
   if (!fs.existsSync(BG_DIR)) fs.mkdirSync(BG_DIR, { recursive: true });
 }
 
+/* Questa rotta restituisce tutta la tabella, quindi la password di BookOrbit
+   va tolta: non deve arrivare al browser nemmeno a chi l'ha appena scritta.
+   Per sapere soltanto se è impostata c'è GET /api/bookorbit/credenziali.
+   Le altre integrazioni (Grimmory, Hardcover) continuano a comportarsi come
+   prima, perché la loro pagina rilegge il valore per poterlo risalvare. */
+const DA_NON_RESTITUIRE = new Set(['bookorbit_password']);
+
 // GET /api/settings
 router.get('/', (req, res) => {
   const db = getDb();
   const rows = db.prepare('SELECT * FROM settings').all();
   const settings = {};
   for (const r of rows) {
+    if (DA_NON_RESTITUIRE.has(r.key)) continue;
     try { settings[r.key] = JSON.parse(r.value); } catch { settings[r.key] = r.value; }
   }
   res.json(settings);

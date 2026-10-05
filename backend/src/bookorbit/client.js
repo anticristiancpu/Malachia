@@ -7,18 +7,51 @@
 //    di Malachia e non vengono mai scritte nei log, nemmeno in caso di errore.
 
 const axios = require('axios');
+const { getDb } = require('../db');
 
-const BASE = (process.env.BOOKORBIT_URL || '').replace(/\/+$/, '');
-const UTENTE = process.env.BOOKORBIT_USERNAME || '';
-const PASSWORD = process.env.BOOKORBIT_PASSWORD || '';
+/* La configurazione si legge a ogni uso: le impostazioni dell'app hanno la
+   precedenza sul .env, così si possono cambiare le credenziali dalla pagina
+   Impostazioni senza riavviare il server. La password non esce mai di qui. */
+function configurazione() {
+  let salvate = {};
+  try {
+    const righe = getDb().prepare(
+      "SELECT key, value FROM settings WHERE key IN ('bookorbit_url','bookorbit_username','bookorbit_password')"
+    ).all();
+    for (const r of righe) salvate[r.key] = r.value || '';
+  } catch { /* tabella non pronta: si usa il .env */ }
 
-const API = () => `${BASE}/api/v1`;
-const configurato = () => Boolean(BASE && UTENTE && PASSWORD);
+  return {
+    base: String(salvate.bookorbit_url || process.env.BOOKORBIT_URL || '').trim().replace(/\/+$/, ''),
+    utente: String(salvate.bookorbit_username || process.env.BOOKORBIT_USERNAME || '').trim(),
+    password: String(salvate.bookorbit_password || process.env.BOOKORBIT_PASSWORD || ''),
+    // da dove arrivano, per dirlo nella pagina Impostazioni (senza il valore)
+    origine: salvate.bookorbit_url || salvate.bookorbit_username || salvate.bookorbit_password
+      ? 'impostazioni'
+      : (process.env.BOOKORBIT_URL ? 'ambiente' : 'nessuna'),
+  };
+}
+
+const API = (base) => `${base}/api/v1`;
+const configurato = () => {
+  const c = configurazione();
+  return Boolean(c.base && c.utente && c.password);
+};
 
 // Il token vive solo in memoria: niente su disco, niente verso il frontend.
 let token = null;
 let scadenza = 0;
 let inCorso = null;
+// Impronta delle credenziali con cui è stato preso il token: se cambiano,
+// il token va buttato. Non contiene la password in chiaro.
+let impronta = null;
+
+const improntaDi = (c) =>
+  require('crypto').createHash('sha256')
+    .update(`${c.base}|${c.utente}|${c.password}`).digest('hex');
+
+// Da chiamare quando le credenziali vengono cambiate dall'esterno.
+function dimenticaToken() { token = null; scadenza = 0; impronta = null; }
 
 // Un messaggio d'errore di axios può contenere l'URL con le credenziali o il
 // corpo della richiesta. Lo riduciamo a qualcosa che si può mostrare e scrivere.
@@ -45,11 +78,12 @@ const MARGINE_MS = 60 * 1000;
 
 async function accedi() {
   if (!configurato()) {
-    throw new ErroreBookOrbit('BookOrbit non è configurato: manca BOOKORBIT_URL, BOOKORBIT_USERNAME o BOOKORBIT_PASSWORD nel .env', 503);
+    throw new ErroreBookOrbit('BookOrbit non è configurato: indirizzo, utente o password mancanti (Impostazioni, oppure .env)', 503);
   }
+  const c = configurazione();
   try {
-    const r = await axios.post(`${API()}/auth/login`,
-      { username: UTENTE, password: PASSWORD },
+    const r = await axios.post(`${API(c.base)}/auth/login`,
+      { username: c.utente, password: c.password },
       { timeout: 15000, headers: { 'Content-Type': 'application/json' } });
     const t = r.data?.accessToken;
     if (!t) throw new ErroreBookOrbit('BookOrbit non ha restituito un token di accesso', 502);
@@ -61,6 +95,7 @@ async function accedi() {
       if (corpo?.exp) durata = corpo.exp * 1000 - Date.now();
     } catch { /* un token opaco va bene comunque */ }
     scadenza = Date.now() + Math.max(durata - MARGINE_MS, 30 * 1000);
+    impronta = improntaDi(c);
     return token;
   } catch (e) {
     if (e instanceof ErroreBookOrbit) throw e;
@@ -70,6 +105,8 @@ async function accedi() {
 
 // Una sola richiesta di accesso alla volta, anche se arrivano chiamate in parallelo.
 async function tokenValido() {
+  // Credenziali cambiate dalle Impostazioni: il token vecchio non vale più.
+  if (token && impronta !== improntaDi(configurazione())) dimenticaToken();
   if (token && Date.now() < scadenza) return token;
   if (!inCorso) inCorso = accedi().finally(() => { inCorso = null; });
   return inCorso;
@@ -82,7 +119,7 @@ async function chiama(config, { secondoTentativo = false } = {}) {
   try {
     return await axios({
       ...config,
-      url: `${API()}${config.url}`,
+      url: `${API(configurazione().base)}${config.url}`,
       timeout: config.timeout || 20000,
       headers: { ...(config.headers || {}), Authorization: `Bearer ${t}` },
     });
@@ -130,7 +167,10 @@ async function copertina(idRemoto) {
 // Prova di raggiungibilità: non solleva, risponde sempre con un esito.
 async function prova() {
   if (!configurato()) {
-    return { configurato: false, raggiungibile: false, errore: 'BookOrbit non è configurato nel .env' };
+    return {
+      configurato: false, raggiungibile: false,
+      errore: 'BookOrbit non è configurato: inserisci indirizzo, utente e password nelle Impostazioni',
+    };
   }
   try {
     const r = await chiama({ method: 'get', url: '/auth/me', timeout: 8000 });
@@ -146,14 +186,16 @@ async function prova() {
 // fileId più recente che abbiamo nello specchio.
 
 function linkScheda(idRemoto) {
-  return BASE && idRemoto ? `${BASE}/book/${idRemoto}` : null;
+  const { base } = configurazione();
+  return base && idRemoto ? `${base}/book/${idRemoto}` : null;
 }
 function linkLettore(idRemoto, fileId) {
-  return BASE && idRemoto && fileId ? `${BASE}/read/${idRemoto}/${fileId}` : null;
+  const { base } = configurazione();
+  return base && idRemoto && fileId ? `${base}/read/${idRemoto}/${fileId}` : null;
 }
 
 module.exports = {
-  configurato, elencoLibri, copertina, prova,
+  configurato, configurazione, dimenticaToken,
+  elencoLibri, copertina, prova,
   linkScheda, linkLettore, ErroreBookOrbit,
-  get base() { return BASE; },
 };

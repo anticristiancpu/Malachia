@@ -66,6 +66,69 @@ router.get('/status', async (req, res) => {
   res.json({ ...esito, specchio: conteggi(db), ultima_sincronizzazione: ultima });
 });
 
+// ── credenziali ────────────────────────────────────────────────────────────
+//
+// Si possono tenere nel .env del server oppure scriverle qui dalle Impostazioni:
+// in quel caso vincono queste. La password viene salvata ma non torna mai
+// indietro: di lei si sa soltanto se c'è.
+
+// GET /api/bookorbit/credenziali
+router.get('/credenziali', (req, res) => {
+  const c = cliente.configurazione();
+  res.json({
+    url: c.base || '',
+    username: c.utente || '',
+    password_impostata: Boolean(c.password),
+    origine: c.origine,          // 'impostazioni' | 'ambiente' | 'nessuna'
+    modificabile_qui: true,
+  });
+});
+
+// PUT /api/bookorbit/credenziali  { url, username, password? }
+// La password si manda solo quando la si cambia: se manca resta quella di prima.
+router.put('/credenziali', async (req, res) => {
+  const db = getDb();
+  const url = String(req.body?.url ?? '').trim().replace(/\/+$/, '');
+  const username = String(req.body?.username ?? '').trim();
+  const password = req.body?.password;
+
+  if (url && !/^https?:\/\//i.test(url)) {
+    return res.status(400).json({ error: "l'indirizzo deve cominciare con http:// o https://" });
+  }
+
+  const scrivi = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)');
+  db.transaction(() => {
+    scrivi.run('bookorbit_url', url);
+    scrivi.run('bookorbit_username', username);
+    // stringa vuota o campo assente: non si tocca quella salvata
+    if (typeof password === 'string' && password.length) scrivi.run('bookorbit_password', password);
+  })();
+
+  cliente.dimenticaToken();   // le vecchie credenziali non valgono più
+
+  const esito = await cliente.prova();
+  const c = cliente.configurazione();
+  res.json({
+    salvato: true,
+    url: c.base, username: c.utente,
+    password_impostata: Boolean(c.password),
+    origine: c.origine,
+    ...esito,
+  });
+});
+
+// DELETE /api/bookorbit/credenziali — dimentica quelle salvate qui.
+// Se nel .env del server ce ne sono, tornano a valere quelle.
+router.delete('/credenziali', (req, res) => {
+  const db = getDb();
+  db.prepare(
+    "DELETE FROM settings WHERE key IN ('bookorbit_url','bookorbit_username','bookorbit_password')"
+  ).run();
+  cliente.dimenticaToken();
+  const c = cliente.configurazione();
+  res.json({ dimenticate: true, origine: c.origine, password_impostata: Boolean(c.password) });
+});
+
 // ── sincronizzazione ───────────────────────────────────────────────────────
 
 // POST /api/bookorbit/sync        applica
