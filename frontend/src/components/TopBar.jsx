@@ -12,9 +12,7 @@ const TABS = [
     ],
   },
   { label: 'Scaffali',   path: '/scaffali' },
-  { label: 'Collocazione', path: '/collocazione' },
   { label: 'Ebook',        path: '/ebook' },
-  { label: 'Sistema',      path: '/sistema' },
   { label: 'Desiderata', path: '/desiderata' },
   { label: 'Note',       path: '/note' },
   {

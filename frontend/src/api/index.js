@@ -76,6 +76,21 @@ export const shelves = {
   deleteImage: (id) => api.delete(`/shelves/${id}/image`).then(r => r.data),
   // ebook di tipo ebook che non stanno su nessuno scaffale
   ebookSenzaScaffale: () => api.get('/shelves/ebook-senza-scaffale').then(r => r.data),
+  // ogni scaffale con le prime copertine, per la pagina generale
+  panoramica: (per = 40) => api.get('/shelves/panoramica', { params: { per } }).then(r => r.data),
+  // sposta uno scaffale: after_shelf_id null lo porta in testa
+  moveShelf: (id, { after_shelf_id = null, library_id } = {}) =>
+    api.patch(`/shelves/${id}/posizione`,
+      library_id !== undefined ? { after_shelf_id, library_id } : { after_shelf_id }).then(r => r.data),
+  // l'etichetta dei record senza sezione: si rinomina e si sposta come le altre
+  updateBase: (id, dati) => api.patch(`/shelves/${id}/base`, dati).then(r => r.data),
+};
+
+export const libraries = {
+  list:   ()         => api.get('/libraries').then(r => r.data),
+  create: (name)     => api.post('/libraries', { name }).then(r => r.data),
+  update: (id, dati) => api.patch(`/libraries/${id}`, dati).then(r => r.data),
+  delete: (id)       => api.delete(`/libraries/${id}`).then(r => r.data),
 };
 
 // Ebook in BookOrbit. Di là si legge soltanto; qui si scrive solo su conferma.

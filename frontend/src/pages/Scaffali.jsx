@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { shelves as shelvesApi, authors as authorsApi } from '../api/index.js';
+import { shelves as shelvesApi, libraries as librariesApi } from '../api/index.js';
+import BookCover from '../components/BookCover.jsx';
+import { tipoRecord } from '../components/EbookMark.jsx';
 import { useToast } from '../components/Toast.jsx';
 
 const GRUPPI = [
@@ -182,61 +184,115 @@ function DeleteConfirmModal({ shelf, onConfirm, onClose }) {
 export default function Scaffali() {
   const navigate = useNavigate();
   const toast    = useToast();
-  const [shelves,  setShelves]  = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [newName,  setNewName]  = useState('');
-  const [newSub,   setNewSub]   = useState('');
-  const [newKind,  setNewKind]  = useState('tematico');
-
-  const [tolkienCount, setTolkienCount] = useState(null);
+  const [shelves,   setShelves]   = useState([]);
+  const [librerie,  setLibrerie]  = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [creating,  setCreating]  = useState(false);
+  const [newName,   setNewName]   = useState('');
+  const [newSub,    setNewSub]    = useState('');
+  const [newKind,   setNewKind]   = useState('tematico');
+  const [nuovaLib,  setNuovaLib]  = useState(null);   // null = non sto creando
 
   // Context menu + modali
-  const [ctxMenu,     setCtxMenu]     = useState(null); // { x, y, shelf }
-  const [editShelf,   setEditShelf]   = useState(null); // shelf da modificare
-  const [deleteShelf, setDeleteShelf] = useState(null); // shelf da eliminare
+  const [ctxMenu,     setCtxMenu]     = useState(null);
+  const [editShelf,   setEditShelf]   = useState(null);
+  const [deleteShelf, setDeleteShelf] = useState(null);
 
-  useEffect(() => {
-    shelvesApi.list().then(setShelves).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  // Trascinamento degli scaffali
+  const [trascinato, setTrasc] = useState(null);
+  const [sopra,      setSopra] = useState(null);
 
-  useEffect(() => {
-    authorsApi.list({ search: 'tolkien', limit: 10 })
-      .then(r => {
-        const jrr = (r.authors || []).find(a => a.name.toLowerCase().includes('tolkien'));
-        setTolkienCount(jrr ? jrr.book_count : 0);
-      })
-      .catch(() => setTolkienCount(0));
+  const carica = useCallback(() => {
+    return Promise.all([
+      shelvesApi.panoramica(40).catch(() => []),
+      librariesApi.list().catch(() => []),
+    ]).then(([s, l]) => { setShelves(s); setLibrerie(l); })
+      .finally(() => setLoading(false));
   }, []);
+  useEffect(() => { carica(); }, [carica]);
+
+  /* Le librerie in ordine, e in fondo gli scaffali non assegnati. */
+  const gruppi = useMemo(() => {
+    const perLib = new Map(librerie.map(l => [l.id, []]));
+    const liberi = [];
+    for (const s of shelves) {
+      if (s.library_id && perLib.has(s.library_id)) perLib.get(s.library_id).push(s);
+      else liberi.push(s);
+    }
+    const elenco = librerie.map(l => ({ ...l, scaffali: perLib.get(l.id) || [] }));
+    if (liberi.length || librerie.length === 0) {
+      elenco.push({ id: null, name: librerie.length ? 'Senza libreria' : 'I tuoi scaffali', scaffali: liberi });
+    }
+    return elenco;
+  }, [shelves, librerie]);
 
   async function createShelf() {
-    if (!newName.trim()) return;
+    const nome = newName.trim();
+    if (!nome) return;
     try {
-      const s = await shelvesApi.create({ name: newName.trim(), subtitle: newSub.trim(), kind: newKind });
-      setShelves(prev => [...prev, { ...s, book_count: 0 }]);
-      setCreating(false); setNewName(''); setNewSub('');
-      toast('Scaffale creato', 'success');
-    } catch { toast('Errore', 'error'); }
+      const s = await shelvesApi.create({ name: nome, subtitle: newSub.trim() || undefined, kind: newKind });
+      setCreating(false); setNewName(''); setNewSub(''); setNewKind('tematico');
+      await carica();
+      toast('"' + s.name + '" creato', 'success');
+    } catch { toast('Errore nella creazione', 'error'); }
   }
 
-  async function saveEdit(name, subtitle) {
-    const shelf = editShelf;
-    setEditShelf(null);
+  async function saveEdit(shelf, { name, subtitle }) {
     try {
-      await shelvesApi.update(shelf.id, { name, subtitle, description: shelf.description, public: shelf.public });
+      await shelvesApi.update(shelf.id, { name, subtitle });
+      setEditShelf(null);
       setShelves(prev => prev.map(s => s.id === shelf.id ? { ...s, name, subtitle } : s));
       toast('Scaffale aggiornato', 'success');
     } catch { toast('Errore aggiornamento', 'error'); }
   }
 
-  async function confirmDelete() {
-    const shelf = deleteShelf;
-    setDeleteShelf(null);
+  async function confirmDelete(shelf) {
     try {
       await shelvesApi.delete(shelf.id);
+      setDeleteShelf(null);
       setShelves(prev => prev.filter(s => s.id !== shelf.id));
-      toast(`"${shelf.name}" eliminato`, 'success');
+      toast('"' + shelf.name + '" eliminato', 'success');
     } catch { toast('Errore eliminazione', 'error'); }
+  }
+
+  async function creaLibreria() {
+    const nome = (nuovaLib || '').trim();
+    setNuovaLib(null);
+    if (!nome) return;
+    try { await librariesApi.create(nome); await carica(); toast('Libreria "' + nome + '" creata', 'success'); }
+    catch { toast('Errore nella creazione della libreria', 'error'); }
+  }
+
+  async function rinominaLibreria(lib) {
+    const nome = window.prompt('Nome della libreria', lib.name);
+    if (nome === null || !nome.trim() || nome === lib.name) return;
+    try { await librariesApi.update(lib.id, { name: nome.trim() }); await carica(); }
+    catch { toast('Errore nella rinomina', 'error'); }
+  }
+
+  async function eliminaLibreria(lib) {
+    try {
+      const r = await librariesApi.delete(lib.id);
+      await carica();
+      toast(r.scaffali_liberati
+        ? 'Libreria eliminata, ' + r.scaffali_liberati + ' scaffali restano senza'
+        : 'Libreria eliminata', 'success');
+    } catch { toast('Errore eliminazione', 'error'); }
+  }
+
+  /* Rilascio: lo scaffale va dopo quello su cui cade, dentro la sua libreria. */
+  async function rilascia(dopoScaffale, libreriaId) {
+    if (!trascinato) return;
+    const mosso = trascinato;
+    setTrasc(null); setSopra(null);
+    if (dopoScaffale && dopoScaffale.id === mosso.id) return;
+    try {
+      await shelvesApi.moveShelf(mosso.id, {
+        after_shelf_id: dopoScaffale ? dopoScaffale.id : null,
+        library_id: libreriaId,
+      });
+      await carica();
+    } catch { toast('Errore nello spostamento', 'error'); }
   }
 
   function openContextMenu(e, shelf) {
@@ -251,10 +307,10 @@ export default function Scaffali() {
   );
 
   return (
-    <div style={{ padding: '28px 36px 48px', display: 'flex', flexDirection: 'column', gap: 32, overflowY: 'auto', height: '100%' }}>
+    <div style={{ padding: '28px 36px 48px', display: 'flex', flexDirection: 'column', gap: 26, overflowY: 'auto', height: '100%' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexShrink: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexShrink: 0, gap: 14, flexWrap: 'wrap' }}>
         <div>
           <div className="m-eyebrow" style={{ marginBottom: 4 }}>Capitulum IV</div>
           <div style={{
@@ -268,154 +324,111 @@ export default function Scaffali() {
               fontSize: 22, fontStyle: 'italic', fontWeight: 400,
               color: 'var(--cine-gold)', letterSpacing: '0.01em',
               textTransform: 'none', marginLeft: '0.4em',
-            }}>& collezioni</em>
+            }}>& librerie</em>
           </div>
         </div>
-        <button className="m-btn" onClick={() => setCreating(true)}>+ nuovo scaffale</button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="m-btn m-btn-ghost m-btn-sm" onClick={() => setNuovaLib('')}>+ libreria</button>
+          <button className="m-btn" onClick={() => setCreating(true)}>+ nuovo scaffale</button>
+        </div>
       </div>
 
-      {/* ─── Collezioni di riferimento ─────────────────────────────────────── */}
-      <section>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          <div className="m-eyebrow" style={{ fontSize: 12, letterSpacing: '0.08em' }}>Collezioni di riferimento</div>
-          <div style={{ flex: 1, height: 1, background: 'var(--cine-gold-dim)' }}/>
+      {nuovaLib !== null && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input className="m-input" autoFocus value={nuovaLib}
+            onChange={e => setNuovaLib(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') creaLibreria(); if (e.key === 'Escape') setNuovaLib(null); }}
+            placeholder="nome della libreria, per esempio Studio o Camera"
+            style={{ maxWidth: 340, fontSize: 13 }}/>
+          <button className="m-btn m-btn-sm" onClick={creaLibreria}>crea</button>
+          <button className="m-btn m-btn-ghost m-btn-sm" onClick={() => setNuovaLib(null)}>annulla</button>
         </div>
-        <div
-          onClick={() => navigate('/collezioni/tolkien')}
-          style={{
-            position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '24px 28px', cursor: 'pointer', gap: 24, minHeight: 130, overflow: 'hidden',
-            border: '1px solid rgba(191,161,88,0.35)',
-          }}
-        >
-          <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(/tolkien-banner.jpg)', backgroundSize: 'cover', backgroundPosition: 'center 30%', filter: 'brightness(0.45) saturate(0.8)' }}/>
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to right, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.5) 100%)' }}/>
-          <img src="/tolkien-monogram.svg" alt="Tolkien" style={{ height: 88, width: 'auto', flexShrink: 0, position: 'relative', zIndex: 1, filter: 'invert(1) sepia(1) saturate(3) hue-rotate(5deg) brightness(1.1)', mixBlendMode: 'screen', opacity: 0.88 }}/>
-          <div style={{ flex: 1, position: 'relative', zIndex: 1 }}>
-            <div className="m-eyebrow" style={{ fontSize: 11, marginBottom: 3, color: 'rgba(255,255,255,0.6)' }}>Canone · edizioni italiane</div>
-            <div className="m-serif" style={{ fontSize: 30, fontWeight: 500, lineHeight: 1.05, color: '#fff' }}>J.R.R. Tolkien</div>
-            <div className="m-marginalia" style={{ marginTop: 4, fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>22 opere · Bompiani, Rusconi, Mondadori</div>
+      )}
+
+      {/* Creazione di uno scaffale */}
+      {creating && (
+        <div style={{ border: '1px solid var(--cine-gold-dim)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 520 }}>
+          <div className="m-eyebrow" style={{ fontSize: 11 }}>Nuovo scaffale</div>
+          <input className="m-input" autoFocus placeholder="nome" value={newName}
+            onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') createShelf(); if (e.key === 'Escape') setCreating(false); }}/>
+          <input className="m-input" placeholder="sottotitolo (facoltativo)" value={newSub}
+            onChange={e => setNewSub(e.target.value)}/>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {GRUPPI.map(([k, titolo, spiega]) => (
+              <button key={k} className={'m-btn m-btn-sm' + (newKind === k ? '' : ' m-btn-ghost')}
+                style={{ fontSize: 11 }} title={spiega} onClick={() => setNewKind(k)}>{titolo}</button>
+            ))}
           </div>
-          {tolkienCount !== null && (
-            <div style={{ textAlign: 'right', flexShrink: 0, position: 'relative', zIndex: 1 }}>
-              <div className="m-nums" style={{ fontSize: 42, lineHeight: 1, color: '#c9a84c' }}>{tolkienCount}</div>
-              <div className="m-marginalia" style={{ fontSize: 11, marginTop: 3, color: 'rgba(255,255,255,0.5)' }}>
-                {tolkienCount === 1 ? 'volume posseduto' : 'volumi posseduti'}
-              </div>
-            </div>
-          )}
-          <div style={{ fontSize: 22, color: '#c9a84c', flexShrink: 0, paddingLeft: 4, position: 'relative', zIndex: 1 }}>›</div>
-        </div>
-      </section>
-
-      {/* ─── I tuoi scaffali ───────────────────────────────────────────────── */}
-      <section>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          <div className="m-eyebrow" style={{ fontSize: 12, letterSpacing: '0.08em' }}>I tuoi scaffali</div>
-          <div style={{ flex: 1, height: 1, background: 'var(--cine-gold-dim)' }}/>
-          {shelves.length > 0 && (
-            <div className="m-marginalia" style={{ fontSize: 12 }}>{shelves.length} scaffali</div>
-          )}
-        </div>
-
-        {shelves.length === 0 && !creating && (
-          <div style={{ color: 'var(--m-ink-muted)', fontStyle: 'italic', fontSize: 14, padding: '12px 0' }}>
-            Nessuno scaffale — creane uno con il pulsante in alto
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="m-btn m-btn-sm" onClick={createShelf}>crea</button>
+            <button className="m-btn m-btn-ghost m-btn-sm" onClick={() => setCreating(false)}>annulla</button>
           </div>
-        )}
+        </div>
+      )}
 
-        {GRUPPI.map(([tipo, titolo, spiega]) => {
-          const gruppo = shelves.filter(x => (x.kind || 'tematico') === tipo);
-          if (!gruppo.length) return null;
-          return (
-            <div key={tipo} style={{ marginBottom: 24 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
-                <div className="m-eyebrow" style={{ fontSize: 10 }}>{titolo}</div>
-                <div className="m-marginalia" style={{ fontSize: 11 }}>{spiega}</div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
-                {gruppo.map(x => (
-                  <ShelfCard
-                    key={x.id}
-                    shelf={x}
-                    onClick={() => navigate(`/scaffali/${x.id}`)}
-                    onContextMenu={e => openContextMenu(e, x)}
-                  />
-                ))}
-              </div>
+      {/* Le librerie, ognuna con i suoi scaffali in fila */}
+      {gruppi.map(gruppo => (
+        <section key={gruppo.id || 'senza'}>
+          <div
+            onDragOver={e => { if (trascinato) { e.preventDefault(); setSopra('lib-' + gruppo.id); } }}
+            onDragLeave={() => setSopra(x => x === 'lib-' + gruppo.id ? null : x)}
+            onDrop={e => { e.preventDefault(); rilascia(null, gruppo.id); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
+              padding: '4px 6px', flexWrap: 'wrap',
+              background: sopra === 'lib-' + gruppo.id ? 'rgba(191,161,88,0.14)' : 'transparent',
+            }}>
+            <div className="m-eyebrow" style={{ fontSize: 12, letterSpacing: '0.08em' }}>{gruppo.name}</div>
+            <div style={{ flex: 1, height: 1, background: 'var(--cine-gold-dim)', minWidth: 20 }}/>
+            <div className="m-marginalia" style={{ fontSize: 12 }}>
+              {gruppo.scaffali.length} {gruppo.scaffali.length === 1 ? 'scaffale' : 'scaffali'}
             </div>
-          );
-        })}
+            {gruppo.id && (
+              <>
+                <button className="m-btn m-btn-ghost m-btn-sm" style={{ fontSize: 10 }}
+                  onClick={() => rinominaLibreria(gruppo)}>rinomina</button>
+                <button className="m-btn m-btn-ghost m-btn-sm" style={{ fontSize: 10 }}
+                  onClick={() => eliminaLibreria(gruppo)}>elimina</button>
+              </>
+            )}
+          </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
-          {/* Card creazione */}
-          {creating ? (
-            <div style={{ border: '1px solid var(--m-rule-strong)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div className="m-eyebrow" style={{ fontSize: 11 }}>Nuovo scaffale</div>
-              <input
-                className="m-input" placeholder="Nome scaffale" value={newName}
-                onChange={e => setNewName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && createShelf()}
-                autoFocus
-              />
-              <input
-                className="m-input" placeholder="Sottotitolo (opzionale)" value={newSub}
-                onChange={e => setNewSub(e.target.value)}
-              />
-              <div style={{ display: 'flex', gap: 6 }}>
-                {[['tematico', '◇ tematico', 'esiste solo nell’app'],
-                  ['fisico',   '▦ fisico',   'corrisponde a un gruppo reale sulla libreria']].map(([v, etichetta, spiega]) => (
-                  <button key={v} type="button" title={spiega}
-                    onClick={() => setNewKind(v)}
-                    className={newKind === v ? 'm-btn m-btn-sm' : 'm-btn m-btn-ghost m-btn-sm'}
-                    style={{ fontSize: 11, flex: 1, justifyContent: 'center' }}>{etichetta}</button>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                <button className="m-btn" onClick={createShelf}>crea</button>
-                <button className="m-btn m-btn-ghost" onClick={() => { setCreating(false); setNewName(''); setNewSub(''); }}>annulla</button>
-              </div>
-            </div>
-          ) : (
-            <div
-              onClick={() => setCreating(true)}
-              style={{
-                border: '1px dashed var(--m-rule-strong)',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                minHeight: 160, cursor: 'pointer', padding: '20px 22px', textAlign: 'center',
-                transition: 'background 120ms',
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(122,59,46,0.04)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-            >
-              <div style={{ fontSize: 44, color: 'var(--m-ink-muted)', lineHeight: 1 }}>＋</div>
-              <div className="m-serif" style={{ fontSize: 20, fontStyle: 'italic', color: 'var(--m-ink-muted)', marginTop: 8 }}>nuovo scaffale</div>
-              <div className="m-marginalia" style={{ marginTop: 4, maxWidth: 180, fontSize: 12 }}>
-                Tasto destro su uno scaffale per modificarlo
-              </div>
+          {gruppo.scaffali.length === 0 && (
+            <div className="m-marginalia" style={{ fontSize: 12.5, fontStyle: 'italic', padding: '4px 0 10px' }}>
+              {gruppo.id ? 'Trascina qui uno scaffale per metterlo in questa libreria.' : 'Nessuno scaffale.'}
             </div>
           )}
-        </div>
-      </section>
 
-      {/* ─── Ebook senza scaffale ──────────────────────────────────────────── */}
-      <EbookSenzaScaffale
-        shelves={shelves}
-        onAggiunto={() => shelvesApi.list().then(setShelves).catch(() => {})}
-      />
+          {gruppo.scaffali.map(s => (
+            <FilaScaffale
+              key={s.id} scaffale={s}
+              inTrascinamento={trascinato?.id === s.id}
+              sorvolato={sopra === s.id}
+              onApri={() => navigate('/scaffali/' + s.id)}
+              onMenu={e => openContextMenu(e, s)}
+              onApriLibro={bid => navigate('/libro/' + bid)}
+              onDragStart={() => setTrasc(s)}
+              onDragEnd={() => { setTrasc(null); setSopra(null); }}
+              onDragOver={e => { if (trascinato) { e.preventDefault(); setSopra(s.id); } }}
+              onDragLeave={() => setSopra(x => x === s.id ? null : x)}
+              onDrop={e => { e.preventDefault(); rilascia(s, gruppo.id); }}
+            />
+          ))}
+        </section>
+      ))}
 
-      {/* ─── Context menu tasto destro ─── */}
+      <EbookSenzaScaffale shelves={shelves} onAggiunto={carica} />
+
       {ctxMenu && (
         <ShelfContextMenu
-          x={ctxMenu.x} y={ctxMenu.y}
-          shelf={ctxMenu.shelf}
+          x={ctxMenu.x} y={ctxMenu.y} shelf={ctxMenu.shelf}
           onClose={() => setCtxMenu(null)}
           onEdit={() => setEditShelf(ctxMenu.shelf)}
           onDelete={() => setDeleteShelf(ctxMenu.shelf)}
         />
       )}
 
-      {/* Modal modifica (include gestione immagine) */}
       {editShelf && (
         <EditShelfModal
           shelf={editShelf}
@@ -426,10 +439,83 @@ export default function Scaffali() {
         />
       )}
 
-      {/* Modal conferma eliminazione */}
       {deleteShelf && (
         <DeleteConfirmModal shelf={deleteShelf} onConfirm={confirmDelete} onClose={() => setDeleteShelf(null)}/>
       )}
+    </div>
+  );
+}
+
+/* ── Uno scaffale visto di fronte: una fila di copertine che scorre ────────
+   Qui non si riordina niente: e' una vetrina, per lavorarci si apre lo
+   scaffale. Si trascina invece lo scaffale intero, per cambiarne l'ordine o
+   spostarlo in un'altra libreria.                                          */
+function FilaScaffale({ scaffale, inTrascinamento, sorvolato, onApri, onMenu, onApriLibro,
+                        onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop }) {
+  const altezza = Math.min(scaffale.cover_height || 130, 118);
+  const libri = (scaffale.books || []).filter(b =>
+    scaffale.show_ebooks ? true : tipoRecord(b) !== 'ebook');
+  const nascosti = (scaffale.books || []).length - libri.length;
+  const restanti = (scaffale.book_count || 0) - (scaffale.books || []).length;
+
+  return (
+    <div
+      onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
+      style={{
+        marginBottom: 20, opacity: inTrascinamento ? 0.4 : 1,
+        borderTop: sorvolato ? '2px solid var(--m-terracotta, #c0533b)' : '2px solid transparent',
+        paddingTop: 6,
+      }}>
+      {/* intestazione: e' questa che si trascina */}
+      <div
+        draggable onDragStart={onDragStart} onDragEnd={onDragEnd}
+        onContextMenu={onMenu}
+        style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 7, cursor: 'grab', flexWrap: 'wrap' }}>
+        <span style={{ color: 'var(--cine-gold-dim)', fontSize: 13 }} title="trascina per spostare lo scaffale">&#10239;</span>
+        <span className="m-serif" onClick={onApri}
+          style={{ fontSize: 19, color: 'var(--cine-cream)', cursor: 'pointer' }}>{scaffale.name}</span>
+        <span className="m-marginalia" style={{ fontSize: 11.5 }}>
+          {riepilogoTipi(scaffale)}
+          {nascosti > 0 ? ' \u00b7 ' + nascosti + ' ebook nascosti' : ''}
+        </span>
+        <button className="m-btn m-btn-ghost m-btn-sm" style={{ fontSize: 10, marginLeft: 'auto' }}
+          onClick={onApri}>apri &rsaquo;</button>
+      </div>
+
+      {/* la fila che scorre in orizzontale */}
+      <div style={{
+        display: 'flex', alignItems: 'flex-end', gap: 9,
+        overflowX: 'auto', overflowY: 'hidden',
+        padding: '0 2px 18px',
+        backgroundImage: 'linear-gradient(to bottom,' +
+          'transparent calc(100% - 11px),' +
+          'rgba(191,161,88,0.40) calc(100% - 11px),' +
+          'rgba(191,161,88,0.40) calc(100% - 8px),' +
+          'rgba(0,0,0,0.22) calc(100% - 8px),' +
+          'rgba(0,0,0,0.22) calc(100% - 6px),' +
+          'transparent calc(100% - 6px))',
+      }}>
+        {libri.length === 0 && (
+          <div className="m-marginalia" style={{ fontSize: 12, fontStyle: 'italic', paddingBottom: 10 }}>
+            {nascosti > 0 ? 'Solo ebook, nascosti.' : 'Scaffale vuoto.'}
+          </div>
+        )}
+        {libri.map(b => (
+          <div key={b.id} onClick={() => onApriLibro(b.id)} title={b.title}
+            style={{ flexShrink: 0, cursor: 'pointer', lineHeight: 0 }}>
+            <BookCover book={b} w={Math.round(altezza * 0.66)} h={altezza}/>
+          </div>
+        ))}
+        {restanti > 0 && (
+          <div onClick={onApri} title="apri lo scaffale"
+            style={{
+              flexShrink: 0, height: altezza, width: 60, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: '1px dashed rgba(232,220,192,0.22)',
+              color: 'rgba(232,220,192,0.5)', fontSize: 12,
+            }}>+{restanti}</div>
+        )}
+      </div>
     </div>
   );
 }

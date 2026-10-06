@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import BookCover from './BookCover.jsx';
+import { tipoRecord } from './EbookMark.jsx';
 
 /* Lo scaffale guardato di fronte: le copertine affiancate, tutte della stessa
    altezza, appoggiate su un ripiano. Le regole di riordino e i menu sono gli
@@ -67,16 +68,12 @@ function QuandoVisibile({ larghezza, altezza, children }) {
     };
     if (vicino()) { setVista(true); return; }
 
-    // Senza IntersectionObserver si mostra tutto: meglio lento che vuoto.
     if (typeof IntersectionObserver === 'undefined') { setVista(true); return; }
     const osservatore = new IntersectionObserver(([voce]) => {
       if (voce.isIntersecting) { setVista(true); osservatore.disconnect(); }
-    }, { rootMargin: `${MARGINE}px 0px` });   // con anticipo: non si vede comparire
+    }, { rootMargin: `${MARGINE}px 0px` });
     osservatore.observe(rif.current);
 
-    /* Mentre si scorre con la pagina non disegnata l'osservatore tace: il
-       controllo geometrico resta valido comunque. In cattura, perché a
-       scorrere è un contenitore interno e l'evento non risale alla finestra. */
     const alloScorrere = () => { if (vicino()) { setVista(true); osservatore.disconnect(); } };
     window.addEventListener('scroll', alloScorrere, { passive: true, capture: true });
     return () => {
@@ -96,6 +93,42 @@ function QuandoVisibile({ larghezza, altezza, children }) {
       )}
     </div>
   );
+}
+
+/* ── mentre si trascina, la pagina scorre da sola vicino ai bordi ─────────── */
+function useScorrimentoAutomatico(attivo) {
+  useEffect(() => {
+    if (!attivo) return;
+    const SOGLIA = 90, PASSO = 18;
+    let fermo = null;
+
+    const contenitore = () => {
+      let e = document.querySelector('main') || document.scrollingElement;
+      return e;
+    };
+    const muovi = (y) => {
+      const c = contenitore();
+      if (!c) return;
+      const r = c.getBoundingClientRect ? c.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+      const alto = y - Math.max(r.top, 0) < SOGLIA;
+      const basso = Math.min(r.bottom, window.innerHeight) - y < SOGLIA;
+      clearInterval(fermo);
+      if (!alto && !basso) return;
+      fermo = setInterval(() => { c.scrollTop += alto ? -PASSO : PASSO; }, 16);
+    };
+    const suTrascinamento = (e) => muovi(e.clientY);
+    const stop = () => clearInterval(fermo);
+
+    document.addEventListener('dragover', suTrascinamento);
+    document.addEventListener('drop', stop);
+    document.addEventListener('dragend', stop);
+    return () => {
+      clearInterval(fermo);
+      document.removeEventListener('dragover', suTrascinamento);
+      document.removeEventListener('drop', stop);
+      document.removeEventListener('dragend', stop);
+    };
+  }, [attivo]);
 }
 
 /* ── l'etichetta che compare passando sopra una copertina ─────────────────── */
@@ -142,38 +175,92 @@ function Etichetta({ libro, versoDestra }) {
   );
 }
 
-/* ── il cartellino di una sezione, come una linguetta sul ripiano ─────────── */
-function Linguetta({ nome, conteggio, altezza, sorvolata, onDragOver, onDragLeave, onDrop }) {
-  const alta = Math.min(altezza, 54);
+/* ── il cartellino di una sezione, come una linguetta sul ripiano ──────────
+   Si rinomina con un doppio clic, si sposta trascinandola e, se è una sezione
+   vera, si elimina. Quella dei record senza sezione non si può eliminare: è
+   il posto dove vivono, e non avrebbero dove andare.                        */
+function Linguetta({ sezione, base, nome, conteggio, altezza, sorvolata, inTrascinamento,
+                    onRinomina, onElimina,
+                    onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop }) {
+  const [modifica, setModifica] = useState(null);   // null = non sto rinominando
+  const [sopra, setSopra] = useState(false);
+  const alta = Math.min(altezza, 56);
+
+  const salva = () => {
+    const v = (modifica || '').trim();
+    setModifica(null);
+    if (v && v !== nome) onRinomina(v);
+  };
+
   return (
     <div
       onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
-      style={{ height: altezza, display: 'flex', alignItems: 'flex-end', flexShrink: 0 }}>
-      <div style={{
-        height: alta, display: 'flex', flexDirection: 'column', justifyContent: 'center',
-        padding: '0 11px 0 10px', maxWidth: 190,
-        background: sorvolata ? 'rgba(191,161,88,0.22)' : 'rgba(232,220,192,0.07)',
-        borderLeft: '3px solid var(--cine-gold)',
-        borderTop: '1px solid rgba(232,220,192,0.16)',
-        borderBottom: '1px solid rgba(232,220,192,0.16)',
-        // la punta che sporge verso le copertine
-        clipPath: 'polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%)',
+      onMouseEnter={() => setSopra(true)} onMouseLeave={() => setSopra(false)}
+      style={{
+        height: altezza, display: 'flex', alignItems: 'flex-end', flexShrink: 0,
+        position: 'relative', opacity: inTrascinamento ? 0.4 : 1,
       }}>
-        <div className="m-eyebrow" style={{
-          fontSize: 10, lineHeight: 1.2, whiteSpace: 'nowrap',
-          overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 160,
-        }}>{nome}</div>
-        <div className="m-marginalia" style={{ fontSize: 10, marginTop: 1 }}>
-          {conteggio} {conteggio === 1 ? 'volume' : 'volumi'}
-        </div>
+      <div
+        draggable={modifica === null}
+        onDragStart={onDragStart} onDragEnd={onDragEnd}
+        onDoubleClick={() => setModifica(nome)}
+        title="doppio clic per rinominare, trascina per spostare"
+        style={{
+          height: alta, display: 'flex', flexDirection: 'column', justifyContent: 'center',
+          padding: '0 13px 0 10px', maxWidth: 200, cursor: modifica === null ? 'grab' : 'text',
+          background: sorvolata ? 'rgba(191,161,88,0.26)' : 'rgba(232,220,192,0.07)',
+          borderLeft: '3px solid var(--cine-gold)',
+          borderTop: '1px solid rgba(232,220,192,0.16)',
+          borderBottom: '1px solid rgba(232,220,192,0.16)',
+          // la punta che sporge verso le copertine
+          clipPath: 'polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%)',
+        }}>
+        {modifica === null ? (
+          <>
+            <div className="m-eyebrow" style={{
+              fontSize: 10, lineHeight: 1.2, whiteSpace: 'nowrap',
+              overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 168,
+            }}>{nome}</div>
+            <div className="m-marginalia" style={{ fontSize: 10, marginTop: 1 }}>
+              {conteggio} {conteggio === 1 ? 'volume' : 'volumi'}
+            </div>
+          </>
+        ) : (
+          <input
+            autoFocus value={modifica}
+            onChange={e => setModifica(e.target.value)}
+            onBlur={salva}
+            onKeyDown={e => {
+              if (e.key === 'Enter') salva();
+              if (e.key === 'Escape') setModifica(null);
+            }}
+            style={{
+              width: 150, fontSize: 11, padding: '2px 4px', fontFamily: 'inherit',
+              background: 'rgba(0,0,0,0.3)', color: 'var(--cine-cream)',
+              border: '1px solid var(--cine-gold)', outline: 'none',
+            }}/>
+        )}
       </div>
+
+      {sopra && modifica === null && !base && (
+        <button
+          onClick={onElimina}
+          title="elimina la sezione — i suoi volumi restano sullo scaffale"
+          style={{
+            position: 'absolute', top: `calc(100% - ${alta}px - 9px)`, right: -4,
+            width: 18, height: 18, borderRadius: '50%', zIndex: 36, padding: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'var(--m-terracotta, #c0533b)', color: '#fff',
+            border: 'none', cursor: 'pointer', fontSize: 11, lineHeight: 1,
+          }}>×</button>
+      )}
     </div>
   );
 }
 
 /* ── una copertina sul ripiano ────────────────────────────────────────────── */
-function Volume({ libro, altezza, trascinato, cadeQui,
-                 onApri, onMenu, onInserisciDopo,
+function Volume({ libro, altezza, trascinato, lato, selezionato,
+                 onApri, onMenu, onInserisciDopo, onSeleziona,
                  onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop }) {
   const [sopra, setSopra] = useState(false);
   const rif = useRef(null);
@@ -187,40 +274,57 @@ function Volume({ libro, altezza, trascinato, cadeQui,
     if (r) setVersoDestra(r.left + 260 < window.innerWidth);
   };
 
+  // Dove cadrà: a sinistra o a destra di questa copertina, secondo il puntatore.
+  const sopraConLato = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    onDragOver(e, e.clientX < r.left + r.width / 2 ? 'prima' : 'dopo');
+  };
+
   return (
     <div
       ref={rif}
       style={{
         position: 'relative', height: altezza, flexShrink: 0,
         display: 'flex', alignItems: 'flex-end',
-        opacity: trascinato ? 0.35 : 1,
+        opacity: trascinato ? 0.3 : 1,
       }}
       onMouseEnter={() => { decidiLato(); setSopra(true); }}
       onMouseLeave={() => setSopra(false)}
     >
-      {/* dove cadrà la copertina trascinata: una guida verticale sul ripiano */}
-      <div style={{
-        position: 'absolute', left: -Math.round(SPAZIO_X / 2) - 1, bottom: -STACCO,
-        width: 3, height: altezza + STACCO,
-        background: cadeQui ? 'var(--m-terracotta, #c0533b)' : 'transparent',
-        transition: 'background 90ms', zIndex: 30, pointerEvents: 'none',
-      }}/>
+      {/* la guida: compare dal lato in cui cadrà la copertina trascinata */}
+      {lato && (
+        <div style={{
+          position: 'absolute',
+          [lato === 'prima' ? 'left' : 'right']: -Math.round(SPAZIO_X / 2) - 1,
+          bottom: -STACCO, width: 3, height: altezza + STACCO,
+          background: 'var(--m-terracotta, #c0533b)',
+          zIndex: 30, pointerEvents: 'none',
+        }}/>
+      )}
 
       <div
         draggable
         onDragStart={onDragStart} onDragEnd={onDragEnd}
-        onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
+        onDragOver={sopraConLato} onDragLeave={onDragLeave} onDrop={onDrop}
         onContextMenu={onMenu}
-        onClick={onApri}
+        onClick={e => {
+          // con ctrl/cmd o shift si sceglie, altrimenti si apre la scheda
+          if (e.ctrlKey || e.metaKey || e.shiftKey) { e.preventDefault(); onSeleziona(e); }
+          else onApri();
+        }}
         title={libro.title}
-        style={{ cursor: 'pointer', lineHeight: 0 }}
+        style={{
+          cursor: 'pointer', lineHeight: 0,
+          outline: selezionato ? '3px solid var(--cine-gold)' : 'none',
+          outlineOffset: 1,
+        }}
       >
         <QuandoVisibile larghezza={larghezza} altezza={altezza}>
           <BookCover book={libro} w={larghezza} h={altezza}/>
         </QuandoVisibile>
       </div>
 
-      {sopra && !trascinato && (
+      {sopra && !trascinato && !lato && (
         <Etichetta libro={libro} versoDestra={versoDestra}/>
       )}
 
@@ -243,12 +347,18 @@ function Volume({ libro, altezza, trascinato, cadeQui,
 
 /* ── la mensola ───────────────────────────────────────────────────────────── */
 export default function VistaMensola({
-  sezioni, perSezione, sezioneBase, altezza,
+  sezioni, perSezione, sezioneBase, altezza, etichettaBase, mostraEbook = true,
   trascinato, sopra,
-  onTrascinaInizio, onTrascinaFine, onSorvola, onEsci, onRilascia,
+  onTrascinaInizio, onTrascinaFine, onSorvola, onEsci, onRilascia, onRilasciaMolti,
   onApri, onMenu, onInserisci,
+  onRinominaSezione, onEliminaSezione, onSpostaEtichetta,
 }) {
   const larghezzaTipica = Math.round(altezza * PROPORZIONE_PREDEFINITA);
+  const [selezione, setSelezione] = useState(() => new Set());
+  const [etichettaTrascinata, setEtichettaTrasc] = useState(null);
+  const [lato, setLato] = useState(null);          // { id, dove: 'prima'|'dopo' }
+
+  useScorrimentoAutomatico(Boolean(trascinato || etichettaTrascinata));
 
   /* Il ripiano: una fascia che si ripete a ogni riga. Il passo è l'altezza di
      una copertina più lo spazio verticale, lo stesso che usa il flex. */
@@ -269,50 +379,114 @@ export default function VistaMensola({
     backgroundRepeat: 'repeat-y',
   }), [inizio, passo]);
 
-  /* La sezione senza nome, quella dei nuovi arrivi, qui va in fondo: sul
-     ripiano le sezioni con un nome vengono prima. */
+  /* Le etichette nell'ordine deciso: quella dei record senza sezione sta dove
+     è stata messa, e in mancanza di meglio in fondo. */
   const ordinate = useMemo(() => {
     const conNome = sezioni.filter(s => s.id !== sezioneBase);
     const base = sezioni.find(s => s.id === sezioneBase);
-    return base ? [...conNome, base] : conNome;
+    if (!base) return conNome;
+    const massima = conNome.reduce((m, s) => Math.max(m, s.position ?? 0), 0);
+    const posBase = base.position ?? massima + 10;
+    return [...conNome, { ...base, position: posBase }]
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   }, [sezioni, sezioneBase]);
+
+  const nascostiTotali = useMemo(() => {
+    if (mostraEbook) return 0;
+    return Object.values(perSezione).flat().filter(b => tipoRecord(b) === 'ebook').length;
+  }, [perSezione, mostraEbook]);
+
+  const inSelezione = (id) => selezione.has(id);
+  const svuota = () => setSelezione(new Set());
+
+  const seleziona = (id) => setSelezione(s => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+
+  /* Rilascio. Se si trascina una copertina scelta, si muove tutto il gruppo,
+     nell'ordine in cui sta sullo scaffale. */
+  const rilascia = (sezioneId, dopoId) => {
+    setLato(null);
+    if (etichettaTrascinata) {
+      // un'etichetta rilasciata su una copertina va dopo la sezione di quella
+      onSpostaEtichetta(etichettaTrascinata, sezioneId);
+      setEtichettaTrasc(null);
+      return;
+    }
+    if (trascinato && selezione.size > 1 && selezione.has(trascinato.id)) {
+      const ordine = ordinate.flatMap(s => (perSezione[s.id] || []))
+        .filter(b => selezione.has(b.id)).map(b => b.id);
+      svuota();
+      onRilasciaMolti(sezioneId, dopoId, ordine);
+      return;
+    }
+    onRilascia(sezioneId, dopoId);
+  };
 
   const celle = [];
   for (const sez of ordinate) {
-    const righe = perSezione[sez.id] || [];
+    const tutte = perSezione[sez.id] || [];
+    const righe = mostraEbook ? tutte : tutte.filter(b => tipoRecord(b) !== 'ebook');
     const base = sez.id === sezioneBase;
     const ultimoId = righe.length ? righe[righe.length - 1].id : null;
 
     celle.push(
       <Linguetta
         key={`linguetta-${sez.id}`}
-        nome={base ? 'Nuovi arrivi' : (sez.name || 'Senza nome')}
+        sezione={sez} base={base}
+        nome={base ? (etichettaBase || 'Nuovi arrivi') : (sez.name || 'Senza nome')}
         conteggio={righe.length}
         altezza={altezza}
         sorvolata={sopra === `testa-${sez.id}`}
+        inTrascinamento={etichettaTrascinata === sez.id}
+        onRinomina={nome => onRinominaSezione(sez.id, nome)}
+        onElimina={() => onEliminaSezione(sez.id)}
+        onDragStart={() => setEtichettaTrasc(sez.id)}
+        onDragEnd={() => { setEtichettaTrasc(null); onTrascinaFine(); }}
         onDragOver={e => { e.preventDefault(); onSorvola(`testa-${sez.id}`); }}
         onDragLeave={() => onEsci(`testa-${sez.id}`)}
-        onDrop={e => { e.preventDefault(); onRilascia(sez.id, null); }}
+        onDrop={e => {
+          e.preventDefault();
+          if (etichettaTrascinata) {
+            // un'etichetta rilasciata su un'altra si mette prima di quella
+            const i = ordinate.findIndex(x => x.id === sez.id);
+            onSpostaEtichetta(etichettaTrascinata, i > 0 ? ordinate[i - 1].id : null);
+            setEtichettaTrasc(null);
+          } else {
+            rilascia(sez.id, null);
+          }
+        }}
       />
     );
 
-    for (const b of righe) {
+    righe.forEach((b, i) => {
+      const guida = lato && lato.id === b.id ? lato.dove : null;
       celle.push(
         <Volume
           key={b.id} libro={b} altezza={altezza}
-          trascinato={trascinato?.id === b.id}
-          cadeQui={sopra === b.id}
+          trascinato={trascinato?.id === b.id || (trascinato && selezione.has(b.id))}
+          lato={guida}
+          selezionato={inSelezione(b.id)}
           onApri={() => onApri(b.id)}
           onMenu={e => onMenu(e, b, sez.id)}
+          onSeleziona={() => seleziona(b.id)}
           onInserisciDopo={() => onInserisci(base ? null : sez.id, b.id)}
-          onDragStart={() => onTrascinaInizio(b)}
-          onDragEnd={onTrascinaFine}
-          onDragOver={e => { e.preventDefault(); onSorvola(b.id); }}
-          onDragLeave={() => onEsci(b.id)}
-          onDrop={e => { e.preventDefault(); onRilascia(sez.id, b.id); }}
+          onDragStart={() => { setLato(null); onTrascinaInizio(b); }}
+          onDragEnd={() => { setLato(null); onTrascinaFine(); }}
+          onDragOver={(e, dove) => { e.preventDefault(); setLato({ id: b.id, dove }); onSorvola(b.id); }}
+          onDragLeave={() => { setLato(l => (l && l.id === b.id ? null : l)); onEsci(b.id); }}
+          onDrop={e => {
+            e.preventDefault();
+            // "prima" significa dopo il volume che precede; se non c'è, in testa
+            const dove = lato && lato.id === b.id ? lato.dove : 'dopo';
+            const dopoId = dove === 'dopo' ? b.id : (i > 0 ? righe[i - 1].id : null);
+            rilascia(sez.id, dopoId);
+          }}
         />
       );
-    }
+    });
 
     // in coda alla sezione: si rilascia qui per metterlo per ultimo
     celle.push(
@@ -320,7 +494,7 @@ export default function VistaMensola({
         key={`coda-${sez.id}`}
         onDragOver={e => { e.preventDefault(); onSorvola(`coda-${sez.id}`); }}
         onDragLeave={() => onEsci(`coda-${sez.id}`)}
-        onDrop={e => { e.preventDefault(); onRilascia(sez.id, ultimoId); }}
+        onDrop={e => { e.preventDefault(); rilascia(sez.id, ultimoId); }}
         onClick={() => onInserisci(base ? null : sez.id, ultimoId)}
         title="Aggiungi in fondo a questa sezione"
         style={{
@@ -340,6 +514,29 @@ export default function VistaMensola({
 
   return (
     <>
+      {selezione.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12,
+          padding: '7px 12px', border: '1px solid var(--cine-gold-dim)',
+          background: 'rgba(191,161,88,0.10)', flexWrap: 'wrap',
+        }}>
+          <span className="m-eyebrow" style={{ fontSize: 10 }}>
+            {selezione.size} {selezione.size === 1 ? 'scelto' : 'scelti'}
+          </span>
+          <span className="m-marginalia" style={{ fontSize: 11.5 }}>
+            trascinane uno per spostarli tutti insieme
+          </span>
+          <button className="m-btn m-btn-ghost m-btn-sm" style={{ fontSize: 10, marginLeft: 'auto' }}
+            onClick={svuota}>annulla la scelta</button>
+        </div>
+      )}
+
+      {nascostiTotali > 0 && (
+        <div className="m-marginalia" style={{ fontSize: 12, marginBottom: 10 }}>
+          {nascostiTotali} ebook nascosti.
+        </div>
+      )}
+
       <div style={{
         display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', alignContent: 'flex-start',
         columnGap: SPAZIO_X, rowGap: SPAZIO_Y,
@@ -349,6 +546,10 @@ export default function VistaMensola({
         {celle}
       </div>
 
+      <div className="m-marginalia" style={{ fontSize: 11.5, marginTop: 14, opacity: 0.75 }}>
+        Doppio clic su un cartellino per rinominarlo, trascinalo per spostarlo.
+        Ctrl o Cmd mentre clicchi una copertina per sceglierne più di una.
+      </div>
     </>
   );
 }

@@ -4,6 +4,7 @@ import BookCover from '../components/BookCover.jsx';
 import { ORN } from '../components/ORN.jsx';
 import { authors as authorsApi } from '../api/index.js';
 import { useToast } from '../components/Toast.jsx';
+import MenuScaffali from '../components/MenuScaffali.jsx';
 
 export default function DettaglioAutore() {
   const { id } = useParams();
@@ -12,6 +13,7 @@ export default function DettaglioAutore() {
   const [author, setAuthor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [wiki, setWiki] = useState(null);
+  const [menu, setMenu] = useState(null);   // tasto destro su un libro
   const [wikiLoaded, setWikiLoaded] = useState(false);
 
   useEffect(() => {
@@ -169,6 +171,7 @@ export default function DettaglioAutore() {
                 key={b.id}
                 style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer' }}
                 onClick={() => navigate(`/libro/${b.id}`)}
+                onContextMenu={e => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, libro: b }); }}
               >
                 <BookCover book={b} w={CARD_W} h={CARD_H}/>
                 <div className="m-serif" style={{ fontSize: 12, textAlign: 'center', lineHeight: 1.15, width: '100%' }}>
@@ -182,6 +185,14 @@ export default function DettaglioAutore() {
           </div>
         )}
       </div>
+
+      {menu && (
+        <MenuScaffali
+          x={menu.x} y={menu.y} libro={menu.libro}
+          onChiudi={() => setMenu(null)}
+          onApri={bid => navigate(`/libro/${bid}`)}
+        />
+      )}
     </div>
   );
 }

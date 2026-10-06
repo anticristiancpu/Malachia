@@ -8,7 +8,7 @@ const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../../data/malac
 // Versione dello schema. Va alzata di uno ogni volta che si aggiunge una
 // migrazione: è questo numero a dire se c'è davvero qualcosa da applicare,
 // e quindi se serve un backup prima di toccare il database.
-const VERSIONE_SCHEMA = 5;
+const VERSIONE_SCHEMA = 6;
 
 // Quante copie di sicurezza tenere accanto al database.
 const BACKUP_DA_TENERE = 5;
@@ -36,8 +36,19 @@ function backupPrimaDelleMigrazioni(versioneAttuale) {
   try {
     const cartella = path.dirname(DB_PATH);
     const prefisso = `${path.basename(DB_PATH)}.backup-`;
+    // Solo i backup veri: un eventuale -wal accanto a una copia non va contato
+    // come se fosse una copia a sé, altrimenti la rotazione sbaglia i conti.
+    // Solo i backup veri: il nome finisce con AAAAMMGG-HHMMSS e basta. Un
+    // eventuale -wal accanto a una copia non deve contare come una copia a sé,
+    // altrimenti la rotazione sbaglia i conti e ne tiene meno di cinque.
+    const stampoValido = (f) => {
+      const coda = f.slice(prefisso.length);
+      return coda.length === 15 && coda[8] === '-'
+          && /^[0-9]+$/.test(coda.slice(0, 8))
+          && /^[0-9]+$/.test(coda.slice(9));
+    };
     const vecchie = fs.readdirSync(cartella)
-      .filter(f => f.startsWith(prefisso))
+      .filter(f => f.startsWith(prefisso) && stampoValido(f))
       .sort()
       .slice(0, -BACKUP_DA_TENERE);
     for (const f of vecchie) fs.unlinkSync(path.join(cartella, f));
@@ -192,6 +203,29 @@ function runMigrations() {
     // copertine. Sono preferenze di ciascuno scaffale, non del browser.
     "ALTER TABLE shelves ADD COLUMN view_mode TEXT DEFAULT 'elenco'",
     'ALTER TABLE shelves ADD COLUMN cover_height INTEGER DEFAULT 130',
+
+    // Librerie: un raggruppamento sopra gli scaffali. Uno scaffale può non
+    // appartenere a nessuna: resta fra quelli non assegnati.
+    `CREATE TABLE IF NOT EXISTS libraries (
+       id TEXT PRIMARY KEY,
+       name TEXT,
+       position REAL,
+       created_at TEXT DEFAULT (datetime('now'))
+     )`,
+    'ALTER TABLE shelves ADD COLUMN library_id TEXT REFERENCES libraries(id) ON DELETE SET NULL',
+    'ALTER TABLE shelves ADD COLUMN position REAL',
+    'CREATE INDEX IF NOT EXISTS idx_shelves_library ON shelves(library_id)',
+
+    // L'etichetta dei record senza sezione: si può rinominare e spostare come
+    // le altre, pur non essendo una sezione vera.
+    'ALTER TABLE shelves ADD COLUMN base_label TEXT',
+    'ALTER TABLE shelves ADD COLUMN base_position REAL',
+
+    // Mostrare o nascondere gli ebook sullo scaffale
+    'ALTER TABLE shelves ADD COLUMN show_ebooks INTEGER DEFAULT 1',
+
+    // La mensola diventa il modo predefinito di guardare uno scaffale
+    "UPDATE shelves SET view_mode = 'mensola' WHERE COALESCE(view_mode,'') IN ('', 'elenco')",
   ];
   for (const m of migrations) {
     try { db.exec(m); } catch {}
@@ -212,6 +246,21 @@ function runMigrations() {
           upd.run(contatore[r.shelf_id], r.shelf_id, r.book_id);
         }
       })(senzaPosizione);
+    }
+  } catch {}
+
+  // Ordine degli scaffali: chi non ce l'ha lo prende in ordine alfabetico,
+  // distanziato di 10 così resta spazio per intercalare senza rinumerare.
+  try {
+    const senza = db.prepare(
+      'SELECT id FROM shelves WHERE position IS NULL ORDER BY name COLLATE NOCASE'
+    ).all();
+    if (senza.length) {
+      const massimo = db.prepare('SELECT COALESCE(MAX(position), 0) AS m FROM shelves').get().m;
+      const upd = db.prepare('UPDATE shelves SET position = ? WHERE id = ?');
+      db.transaction(righe => {
+        righe.forEach((r, i) => upd.run(massimo + (i + 1) * 10, r.id));
+      })(senza);
     }
   } catch {}
 

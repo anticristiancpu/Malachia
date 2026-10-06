@@ -99,6 +99,7 @@ app.use('/api/settings', require('./routes/settings'));
 app.use('/api/prices',   require('./routes/prices'));
 app.use('/api/placement', require('./routes/placement'));
 app.use('/api/bookorbit', require('./routes/bookorbit'));
+app.use('/api/libraries', require('./routes/libraries'));
 
 // Export CSV/JSON
 app.get('/api/export/csv', (req, res) => {

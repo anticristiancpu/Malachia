@@ -14,9 +14,9 @@ const SEGNI = {
   opera: { colore: '#2E4A6B', lettera: 'o', etichetta: "Opera d'arte", titolo: "Opera d'arte" },
 };
 
-/** Quota della larghezza della copertina occupata dal segno, mai sotto i 14 px. */
-const QUOTA = 0.19;
-const MINIMO = 14;
+/** Quota della larghezza della copertina occupata dal segno, mai sotto i 20 px. */
+const QUOTA = 0.27;
+const MINIMO = 20;
 
 /**
  * Il tipo di un record, con paracadute: se la rilegatura dice 'ebook' il
@@ -50,15 +50,17 @@ export default function EbookMark({ tipo = 'ebook', larghezzaCopertina = 100 }) 
         width: lato, height: lato,
         pointerEvents: 'none', zIndex: 2,
         // stacca il segno anche dalle copertine scure o brune
-        filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.55))',
+        filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.7))',
       }}
     >
       <svg viewBox="0 0 100 100" width={lato} height={lato} style={{ display: 'block' }} aria-hidden="true">
+        {/* un filo di chiaro sul taglio: stacca il segno anche dalle copertine scure */}
         <polygon points="0,0 100,0 100,100" fill={segno.colore} />
+        <polyline points="0,0 100,100" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="4" />
         <text
-          x="64" y="34"
+          x="66" y="32"
           textAnchor="middle" dominantBaseline="central"
-          fontSize="44" fontWeight="600" fill="#ffffff"
+          fontSize="52" fontWeight="700" fill="#ffffff"
           fontFamily="'Agmena Pro', Georgia, serif"
         >{segno.lettera}</text>
       </svg>

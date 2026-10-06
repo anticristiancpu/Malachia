@@ -276,18 +276,33 @@ export default function Ebook() {
   const [collegati, setCollegati] = useState([]);
   const [ignorati, setIgnorati] = useState([]);
 
+  /* Quello che si vede viene dall'elenco locale: si legge subito, in parallelo.
+     La prova di raggiungibilità di BookOrbit fa un accesso vero e può prendersi
+     più di un secondo — o il timeout intero se il server è spento — quindi non
+     deve far aspettare la pagina: parte per conto suo e aggiorna l'avviso. */
   const carica = useCallback(async () => {
     setCaricando(true);
+
+    boApi.status()
+      .then(setStato)
+      .catch(() => setStato(s => ({
+        ...(s || {}),
+        configurato: true, raggiungibile: false,
+        errore: 'Malachia non riesce a interrogare BookOrbit',
+        specchio: s?.specchio || { totale: 0 },
+      })));
+
     try {
-      const s = await boApi.status();
-      setStato(s);
-      if (s.specchio.totale > 0) {
-        setProposte(await boApi.proposals());
-        setCollegati(await boApi.items({ stato: 'collegato' }));
-        setIgnorati(await boApi.items({ stato: 'ignorato' }));
-      }
-    } catch (err) {
-      setStato({ configurato: true, raggiungibile: false, errore: 'Malachia non riesce a interrogare BookOrbit', specchio: { totale: 0 } });
+      const [p, c, i] = await Promise.all([
+        boApi.proposals(),
+        boApi.items({ stato: 'collegato' }),
+        boApi.items({ stato: 'ignorato' }),
+      ]);
+      setProposte(p); setCollegati(c); setIgnorati(i);
+      // finché lo stato vero non arriva, i conteggi li sappiamo già da qui
+      setStato(s => s || { configurato: true, raggiungibile: true, specchio: { totale: p.conteggi.certo + p.conteggi.probabile + p.conteggi.verificare + p.conteggi.nessuno + c.length + i.length } });
+    } catch {
+      setProposte(null);
     } finally { setCaricando(false); }
   }, []);
 

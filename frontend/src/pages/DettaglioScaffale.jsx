@@ -196,13 +196,17 @@ export default function DettaglioScaffale() {
   const [nomeTmp, setNomeTmp]     = useState('');
   const [vista, setVista]         = useState('elenco');     // 'elenco' | 'mensola'
   const [altezza, setAltezza]     = useState(130);          // altezza delle copertine
+  const [etichettaBase, setEtichettaBase] = useState('Nuovi arrivi');
+  const [mostraEbook, setMostraEbook]     = useState(true);
 
   const carica = useCallback(() => {
     return shelvesApi.get(id)
       .then(s => {
         setScaffale(s);
-        setVista(s.view_mode === 'mensola' ? 'mensola' : 'elenco');
+        setVista(s.view_mode === 'elenco' ? 'elenco' : 'mensola');
         setAltezza(s.cover_height || 130);
+        setEtichettaBase(s.base_label || 'Nuovi arrivi');
+        setMostraEbook(s.show_ebooks !== 0);
       })
       .catch(() => { toast('Scaffale non trovato', 'error'); navigate('/scaffali'); })
       .finally(() => setCaric(false));
@@ -215,7 +219,7 @@ export default function DettaglioScaffale() {
   const sezioni = useMemo(() => {
     if (!scaffale) return [];
     return [
-      { id: SEZIONE_BASE, name: null, sectionId: null },
+      { id: SEZIONE_BASE, name: null, sectionId: null, position: scaffale.base_position },
       ...(scaffale.sections || []).map(s => ({ ...s, sectionId: s.id })),
     ];
   }, [scaffale]);
@@ -303,6 +307,59 @@ export default function DettaglioScaffale() {
   }, [id]);
   useEffect(() => () => clearTimeout(attesaAltezza.current), []);
 
+  /* Mostrare o nascondere gli ebook: resta con lo scaffale, non col browser. */
+  const cambiaEbook = useCallback((mostra) => {
+    setMostraEbook(mostra);
+    shelvesApi.update(id, { show_ebooks: mostra }).catch(() => {});
+  }, [id]);
+
+  /* Rinominare un cartellino. Quello dei record senza sezione non e' una
+     sezione vera: il suo nome vive sullo scaffale. */
+  async function rinominaEtichetta(sezioneId, nome) {
+    try {
+      if (sezioneId === SEZIONE_BASE) await shelvesApi.updateBase(id, { label: nome });
+      else await shelvesApi.updateSection(id, sezioneId, { name: nome });
+      await carica();
+    } catch { toast('Errore nella rinomina', 'error'); }
+  }
+
+  /* Eliminare una sezione: i suoi volumi tornano fra quelli senza sezione,
+     restano sullo scaffale. Il cartellino base non si puo' eliminare. */
+  async function eliminaEtichetta(sezioneId) {
+    if (sezioneId === SEZIONE_BASE) {
+      toast('Questo cartellino non si elimina: e\u2019 dove stanno i volumi senza sezione', 'error');
+      return;
+    }
+    try { await shelvesApi.deleteSection(id, sezioneId); await carica(); }
+    catch { toast('Errore nell\u2019eliminazione', 'error'); }
+  }
+
+  /* Spostare un cartellino dopo un altro (null = in testa). */
+  async function spostaEtichetta(sezioneId, dopoId) {
+    if (sezioneId === dopoId) return;
+    try {
+      if (sezioneId === SEZIONE_BASE) await shelvesApi.updateBase(id, { after_section_id: dopoId });
+      else await shelvesApi.updateSection(id, sezioneId, { after_section_id: dopoId });
+      await carica();
+    } catch { toast('Errore nello spostamento', 'error'); }
+  }
+
+  /* Spostare piu' volumi insieme, mantenendo l'ordine che avevano. */
+  async function spostaMolti(sezioneId, dopoId, ids) {
+    const dest = sezioneId === SEZIONE_BASE ? null : sezioneId;
+    setTrasc(null); setSopra(null);
+    let precedente = dopoId;
+    try {
+      for (const bid of ids) {
+        if (bid === precedente) continue;
+        await shelvesApi.moveBook(id, bid, { after_book_id: precedente, section_id: dest });
+        precedente = bid;
+      }
+      await carica();
+      toast(ids.length + ' volumi spostati', 'success');
+    } catch { toast('Errore nello spostamento', 'error'); await carica(); }
+  }
+
   async function salvaNome() {
     const v = nomeTmp.trim();
     setRinomino(false);
@@ -386,6 +443,14 @@ export default function DettaglioScaffale() {
           ))}
         </div>
 
+        <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}
+          title="Nasconde i record di tipo ebook, senza toglierli dallo scaffale">
+          <input type="checkbox" checked={mostraEbook}
+            onChange={e => cambiaEbook(e.target.checked)}
+            style={{ accentColor: 'var(--cine-gold)', cursor: 'pointer' }}/>
+          <span className="m-eyebrow" style={{ fontSize: 10 }}>Mostra ebook</span>
+        </label>
+
         {vista === 'mensola' && (
           <label style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             <span className="m-eyebrow" style={{ fontSize: 10 }}>Copertine</span>
@@ -406,13 +471,17 @@ export default function DettaglioScaffale() {
         <>
           <VistaMensola
             sezioni={sezioni} perSezione={perSezione} sezioneBase={SEZIONE_BASE}
-            altezza={altezza}
+            altezza={altezza} etichettaBase={etichettaBase} mostraEbook={mostraEbook}
             trascinato={trascinato} sopra={sopra}
             onTrascinaInizio={setTrasc}
             onTrascinaFine={() => { setTrasc(null); setSopra(null); }}
             onSorvola={setSopra}
             onEsci={chiave => setSopra(x => (x === chiave ? null : x))}
             onRilascia={rilascia}
+            onRilasciaMolti={spostaMolti}
+            onRinominaSezione={rinominaEtichetta}
+            onEliminaSezione={eliminaEtichetta}
+            onSpostaEtichetta={spostaEtichetta}
             onApri={bid => navigate(`/libro/${bid}`)}
             onMenu={(e, b, sezId) => {
               e.preventDefault();
