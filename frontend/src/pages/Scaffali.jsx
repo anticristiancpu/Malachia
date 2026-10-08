@@ -400,6 +400,7 @@ export default function Scaffali() {
             return (
               <button key={chiave(g)}
                 onClick={() => scegli(g)}
+                onDragEnter={e => { if (trascinato) { e.preventDefault(); setSopra('lib-' + g.id); } }}
                 onDragOver={e => { if (trascinato) { e.preventDefault(); setSopra('lib-' + g.id); } }}
                 onDragLeave={() => setSopra(x => x === 'lib-' + g.id ? null : x)}
                 onDrop={e => { e.preventDefault(); rilascia(null, g.id); }}
@@ -514,7 +515,7 @@ function FilaScaffale({ scaffale, inTrascinamento, sorvolato, onApri, onMenu, on
 
   return (
     <div
-      onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
+      onDragEnter={onDragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
       style={{
         marginBottom: 20, opacity: inTrascinamento ? 0.4 : 1,
         borderTop: sorvolato ? '2px solid var(--m-terracotta, #c0533b)' : '2px solid transparent',
@@ -522,7 +523,8 @@ function FilaScaffale({ scaffale, inTrascinamento, sorvolato, onApri, onMenu, on
       }}>
       {/* intestazione: e' questa che si trascina */}
       <div
-        draggable onDragStart={onDragStart} onDragEnd={onDragEnd}
+        draggable onDragEnd={onDragEnd}
+        onDragStart={e => { e.dataTransfer?.setData('text/plain', 'scaffale:' + scaffale.id); onDragStart(e); }}
         onContextMenu={onMenu}
         style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 7, cursor: 'grab', flexWrap: 'wrap' }}>
         <span style={{ color: 'var(--cine-gold-dim)', fontSize: 13 }} title="trascina per spostare lo scaffale">&#10239;</span>

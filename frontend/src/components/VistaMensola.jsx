@@ -16,6 +16,20 @@ const SPESSORE = 3;    // del ripiano
 const STACCO = 5;      // fra il piede della copertina e il ripiano
 const MARGINE = 600;   // quanto prima del bordo si disegna una copertina
 
+/* ── dove va una sezione lasciata su un'altra ──────────────────────────────
+   Come in ogni elenco da riordinare: trascinandola in avanti va dopo quella
+   su cui la si lascia, trascinandola indietro va prima. Prima andava sempre
+   prima: così lasciarla sulla vicina di destra non cambiava nulla, e sembrava
+   che il trascinamento non funzionasse. Restituisce la sezione dopo cui
+   metterla (null = in testa) e da che lato mostrare la guida.               */
+export function dovePosare(ordine, daId, suId) {
+  const da = ordine.findIndex(x => x.id === daId);
+  const su = ordine.findIndex(x => x.id === suId);
+  if (da < 0 || su < 0 || da === su) return null;
+  if (da < su) return { dopo: suId, lato: 'dopo' };
+  return { dopo: su > 0 ? ordine[su - 1].id : null, lato: 'prima' };
+}
+
 /* ── la proporzione vera di una copertina ───────────────────────────────────
    Le copertine devono stare tutte alla stessa altezza e prendersi la larghezza
    che gli spetta. BookCover disegna un riquadro fisso con l'immagine "contain"
@@ -179,7 +193,7 @@ function Etichetta({ libro, versoDestra }) {
    Si rinomina con un doppio clic, si sposta trascinandola e si elimina. Anche
    quella dei record senza sezione: i suoi volumi passano nella prima sezione,
    e se non ce n'è nessuna la pagina lo dice invece di farlo.                */
-function Linguetta({ sezione, base, nome, conteggio, altezza, sorvolata, inTrascinamento,
+function Linguetta({ sezione, base, nome, conteggio, altezza, sorvolata, inTrascinamento, guida,
                     onRinomina, onElimina,
                     onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop }) {
   const [modifica, setModifica] = useState(null);   // null = non sto rinominando
@@ -194,12 +208,20 @@ function Linguetta({ sezione, base, nome, conteggio, altezza, sorvolata, inTrasc
 
   return (
     <div
-      onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
+      onDragEnter={onDragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
       onMouseEnter={() => setSopra(true)} onMouseLeave={() => setSopra(false)}
       style={{
         height: altezza, display: 'flex', alignItems: 'flex-end', flexShrink: 0,
         position: 'relative', opacity: inTrascinamento ? 0.4 : 1,
       }}>
+      {/* dove cadrà la sezione trascinata */}
+      {guida && (
+        <div style={{
+          position: 'absolute', [guida === 'prima' ? 'left' : 'right']: -Math.round(SPAZIO_X / 2) - 2,
+          bottom: -STACCO, width: 4, height: altezza + STACCO,
+          background: 'var(--m-terracotta, #c0533b)', zIndex: 30, pointerEvents: 'none',
+        }}/>
+      )}
       <div
         draggable={modifica === null}
         onDragStart={onDragStart} onDragEnd={onDragEnd}
@@ -307,7 +329,7 @@ function Volume({ libro, altezza, trascinato, lato, selezionato,
       <div
         draggable
         onDragStart={onDragStart} onDragEnd={onDragEnd}
-        onDragOver={sopraConLato} onDragLeave={onDragLeave} onDrop={onDrop}
+        onDragEnter={sopraConLato} onDragOver={sopraConLato} onDragLeave={onDragLeave} onDrop={onDrop}
         onContextMenu={onMenu}
         onClick={e => {
           // con ctrl/cmd o shift si sceglie, altrimenti si apre la scheda
@@ -359,6 +381,7 @@ export default function VistaMensola({
   const [selezione, setSelezione] = useState(() => new Set());
   const [etichettaTrascinata, setEtichettaTrasc] = useState(null);
   const [lato, setLato] = useState(null);          // { id, dove: 'prima'|'dopo' }
+  const [guidaSezione, setGuidaSezione] = useState(null);   // { id, lato }
 
   useScorrimentoAutomatico(Boolean(trascinato || etichettaTrascinata));
 
@@ -412,9 +435,10 @@ export default function VistaMensola({
   const rilascia = (sezioneId, dopoId) => {
     setLato(null);
     if (etichettaTrascinata) {
-      // un'etichetta rilasciata su una copertina va dopo la sezione di quella
-      onSpostaEtichetta(etichettaTrascinata, sezioneId);
-      setEtichettaTrasc(null);
+      // una sezione lasciata su una copertina segue la regola della sezione di quella
+      const p = dovePosare(ordinate, etichettaTrascinata, sezioneId);
+      if (p) onSpostaEtichetta(etichettaTrascinata, p.dopo);
+      setEtichettaTrasc(null); setGuidaSezione(null);
       return;
     }
     if (trascinato && selezione.size > 1 && selezione.has(trascinato.id)) {
@@ -443,19 +467,31 @@ export default function VistaMensola({
         altezza={altezza}
         sorvolata={sopra === `testa-${sez.id}`}
         inTrascinamento={etichettaTrascinata === sez.id}
+        guida={guidaSezione && guidaSezione.id === sez.id ? guidaSezione.lato : null}
         onRinomina={nome => onRinominaSezione(sez.id, nome)}
         onElimina={() => onEliminaSezione(sez.id)}
-        onDragStart={() => setEtichettaTrasc(sez.id)}
-        onDragEnd={() => { setEtichettaTrasc(null); onTrascinaFine(); }}
-        onDragOver={e => { e.preventDefault(); onSorvola(`testa-${sez.id}`); }}
-        onDragLeave={() => onEsci(`testa-${sez.id}`)}
+        onDragStart={e => {
+          // senza un dato da trasportare Firefox non fa partire il trascinamento
+          e.dataTransfer?.setData('text/plain', 'sezione:' + sez.id);
+          if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+          setEtichettaTrasc(sez.id);
+        }}
+        onDragEnd={() => { setEtichettaTrasc(null); setGuidaSezione(null); onTrascinaFine(); }}
+        onDragOver={e => {
+          e.preventDefault();
+          onSorvola(`testa-${sez.id}`);
+          if (etichettaTrascinata) {
+            const p = dovePosare(ordinate, etichettaTrascinata, sez.id);
+            setGuidaSezione(p ? { id: sez.id, lato: p.lato } : null);
+          }
+        }}
+        onDragLeave={() => { onEsci(`testa-${sez.id}`); setGuidaSezione(g => (g && g.id === sez.id ? null : g)); }}
         onDrop={e => {
           e.preventDefault();
           if (etichettaTrascinata) {
-            // un'etichetta rilasciata su un'altra si mette prima di quella
-            const i = ordinate.findIndex(x => x.id === sez.id);
-            onSpostaEtichetta(etichettaTrascinata, i > 0 ? ordinate[i - 1].id : null);
-            setEtichettaTrasc(null);
+            const p = dovePosare(ordinate, etichettaTrascinata, sez.id);
+            if (p) onSpostaEtichetta(etichettaTrascinata, p.dopo);
+            setEtichettaTrasc(null); setGuidaSezione(null);
           } else {
             rilascia(sez.id, null);
           }
@@ -475,7 +511,11 @@ export default function VistaMensola({
           onMenu={e => onMenu(e, b, sez.id)}
           onSeleziona={() => seleziona(b.id)}
           onInserisciDopo={() => onInserisci(base ? null : sez.id, b.id)}
-          onDragStart={() => { setLato(null); onTrascinaInizio(b); }}
+          onDragStart={e => {
+            e.dataTransfer?.setData('text/plain', 'libro:' + b.id);
+            if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+            setLato(null); onTrascinaInizio(b);
+          }}
           onDragEnd={() => { setLato(null); onTrascinaFine(); }}
           onDragOver={(e, dove) => { e.preventDefault(); setLato({ id: b.id, dove }); onSorvola(b.id); }}
           onDragLeave={() => { setLato(l => (l && l.id === b.id ? null : l)); onEsci(b.id); }}
@@ -494,6 +534,7 @@ export default function VistaMensola({
     celle.push(
       <div
         key={`coda-${sez.id}`}
+        onDragEnter={e => { e.preventDefault(); onSorvola(`coda-${sez.id}`); }}
         onDragOver={e => { e.preventDefault(); onSorvola(`coda-${sez.id}`); }}
         onDragLeave={() => onEsci(`coda-${sez.id}`)}
         onDrop={e => { e.preventDefault(); rilascia(sez.id, ultimoId); }}

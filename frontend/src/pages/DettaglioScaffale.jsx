@@ -4,7 +4,7 @@ import BookCover from '../components/BookCover.jsx';
 import { tipoRecord } from '../components/EbookMark.jsx';
 import { shelves as shelvesApi, books as booksApi, libraries as librariesApi } from '../api/index.js';
 import { useToast } from '../components/Toast.jsx';
-import VistaMensola from '../components/VistaMensola.jsx';
+import VistaMensola, { dovePosare } from '../components/VistaMensola.jsx';
 
 /* ══════════════════════════════════════════════════════════════════════════
    Uno scaffale: i libri nell'ordine in cui dialogano fra loro.
@@ -259,6 +259,8 @@ export default function DettaglioScaffale() {
   const [punto, setPunto]         = useState(null);   // dove inserire: { sectionId, afterBookId }
   const [trascinato, setTrasc]    = useState(null);
   const [sopra, setSopra]         = useState(null);   // riga sorvolata durante il trascinamento
+  const [sezioneTrasc, setSezTrasc] = useState(null); // sezione trascinata nella vista a elenco
+  const [guidaSez, setGuidaSez]     = useState(null); // { id, lato } dove cadrà
   const [rinomino, setRinomino]   = useState(false);
   const [nomeTmp, setNomeTmp]     = useState('');
   const [vista, setVista]         = useState('elenco');     // 'elenco' | 'mensola'
@@ -291,10 +293,12 @@ export default function DettaglioScaffale() {
     const base = (!scaffale.base_hidden || volumiSullaBase)
       ? [{ id: SEZIONE_BASE, name: null, sectionId: null, position: scaffale.base_position }]
       : [];
+    const vere = (scaffale.sections || []).map(s => ({ ...s, sectionId: s.id }));
+    const massima = vere.reduce((m, s) => Math.max(m, s.position ?? 0), 0);
     return [
-      ...base,
-      ...(scaffale.sections || []).map(s => ({ ...s, sectionId: s.id })),
-    ];
+      ...base.map(b => ({ ...b, position: b.position ?? massima + 10 })),
+      ...vere,
+    ].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   }, [scaffale]);
 
   const perSezione = useMemo(() => {
@@ -609,8 +613,34 @@ export default function DettaglioScaffale() {
         const righe = perSezione[sez.id] || [];
         const base = sez.id === SEZIONE_BASE;
         return (
-          <section key={sez.id} style={{ marginBottom: 30 }}>
+          <section key={sez.id} style={{
+            marginBottom: 30, opacity: sezioneTrasc === sez.id ? 0.4 : 1,
+            borderTop: guidaSez?.id === sez.id && guidaSez.lato === 'prima' ? '3px solid var(--m-terracotta)' : '3px solid transparent',
+            borderBottom: guidaSez?.id === sez.id && guidaSez.lato === 'dopo' ? '3px solid var(--m-terracotta)' : '3px solid transparent',
+          }}
+            onDragEnter={e => { if (sezioneTrasc) e.preventDefault(); }}
+            onDragOver={e => {
+              if (!sezioneTrasc) return;
+              e.preventDefault();
+              const p = dovePosare(sezioni, sezioneTrasc, sez.id);
+              setGuidaSez(p ? { id: sez.id, lato: p.lato } : null);
+            }}
+            onDrop={e => {
+              if (!sezioneTrasc) return;
+              e.preventDefault();
+              const p = dovePosare(sezioni, sezioneTrasc, sez.id);
+              setSezTrasc(null); setGuidaSez(null);
+              if (p) spostaEtichetta(sezioneTrasc, p.dopo);
+            }}>
             <IntestazioneSezione
+              trascina={{
+                onDragStart: e => {
+                  e.dataTransfer?.setData('text/plain', 'sezione:' + sez.id);
+                  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+                  setSezTrasc(sez.id);
+                },
+                onDragEnd: () => { setSezTrasc(null); setGuidaSez(null); },
+              }}
               sezione={sez} base={base} conteggio={righe.length}
               scaffaleId={id} onCambiato={carica} toast={toast}
               etichettaBase={etichettaBase}
@@ -642,6 +672,7 @@ export default function DettaglioScaffale() {
 
             {/* zona di rilascio in coda alla sezione */}
             <div
+              onDragEnter={e => { e.preventDefault(); setSopra('coda-' + sez.id); }}
               onDragOver={e => { e.preventDefault(); setSopra('coda-' + sez.id); }}
               onDragLeave={() => setSopra(s => s === 'coda-' + sez.id ? null : s)}
               onDrop={e => { e.preventDefault(); rilascia(sez.id, righe.length ? righe[righe.length - 1].id : null); }}
@@ -685,7 +716,7 @@ export default function DettaglioScaffale() {
 
 /* ── Intestazione di una sezione (rinomina / elimina) ─────────────────────── */
 function IntestazioneSezione({ sezione, base, conteggio, scaffaleId, onCambiato, toast,
-                               etichettaBase, onRinominaBase, onEliminaBase }) {
+                               etichettaBase, onRinominaBase, onEliminaBase, trascina }) {
   const [rinomino, setRinomino] = useState(false);
   const [val, setVal] = useState('');
   const [conferma, setConferma] = useState(false);
@@ -710,6 +741,12 @@ function IntestazioneSezione({ sezione, base, conteggio, scaffaleId, onCambiato,
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+      {/* la maniglia: si trascina per spostare la sezione intera */}
+      {!rinomino && trascina && (
+        <span draggable onDragStart={trascina.onDragStart} onDragEnd={trascina.onDragEnd}
+          title="trascina per spostare la sezione"
+          style={{ cursor: 'grab', color: 'var(--m-ink-muted)', fontSize: 15, userSelect: 'none', padding: '0 2px' }}>⠿</span>
+      )}
       {rinomino ? (
         <input className="m-input" autoFocus value={val} onChange={e => setVal(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') salva(); if (e.key === 'Escape') setRinomino(false); }}
@@ -750,8 +787,9 @@ function Riga({ libro, sorvolata, inTrascinamento, onDragStart, onDragEnd, onDra
   return (
     <div
       draggable
-      onDragStart={onDragStart} onDragEnd={onDragEnd}
-      onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
+      onDragStart={e => { e.dataTransfer?.setData('text/plain', 'libro:' + libro.id); onDragStart(e); }}
+      onDragEnd={onDragEnd}
+      onDragEnter={onDragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
       onContextMenu={onMenu}
       onDoubleClick={onApri}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
