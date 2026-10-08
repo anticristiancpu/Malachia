@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { shelves as shelvesApi, libraries as librariesApi } from '../api/index.js';
 import BookCover from '../components/BookCover.jsx';
 import { tipoRecord } from '../components/EbookMark.jsx';
@@ -226,11 +226,25 @@ export default function Scaffali() {
     return elenco;
   }, [shelves, librerie]);
 
+  /* Una libreria per schermata. Quella scelta sta nell'indirizzo, così il
+     tasto indietro e il ritorno da uno scaffale riportano qui. Se manca, o
+     punta a una libreria che non esiste più, si mostra la prima. */
+  const [parametri, setParametri] = useSearchParams();
+  const chiave = (g) => g.id || 'senza';
+  const scelta = parametri.get('libreria');
+  const corrente = gruppi.find(g => chiave(g) === scelta) || gruppi[0] || null;
+  const scegli = useCallback((g) => {
+    setParametri(g ? { libreria: chiave(g) } : {}, { replace: true });
+  }, [setParametri]);
+
   async function createShelf() {
     const nome = newName.trim();
     if (!nome) return;
     try {
-      const s = await shelvesApi.create({ name: nome, subtitle: newSub.trim() || undefined, kind: newKind });
+      const s = await shelvesApi.create({
+        name: nome, subtitle: newSub.trim() || undefined, kind: newKind,
+        library_id: corrente?.id || undefined,
+      });
       setCreating(false); setNewName(''); setNewSub(''); setNewKind('tematico');
       await carica();
       toast('"' + s.name + '" creato', 'success');
@@ -259,7 +273,12 @@ export default function Scaffali() {
     const nome = (nuovaLib || '').trim();
     setNuovaLib(null);
     if (!nome) return;
-    try { await librariesApi.create(nome); await carica(); toast('Libreria "' + nome + '" creata', 'success'); }
+    try {
+      const nuova = await librariesApi.create(nome);
+      await carica();
+      setParametri({ libreria: nuova.id }, { replace: true });
+      toast('Libreria "' + nome + '" creata', 'success');
+    }
     catch { toast('Errore nella creazione della libreria', 'error'); }
   }
 
@@ -274,6 +293,7 @@ export default function Scaffali() {
     try {
       const r = await librariesApi.delete(lib.id);
       await carica();
+      setParametri({}, { replace: true });
       toast(r.scaffali_liberati
         ? 'Libreria eliminata, ' + r.scaffali_liberati + ' scaffali restano senza'
         : 'Libreria eliminata', 'success');
@@ -367,56 +387,90 @@ export default function Scaffali() {
         </div>
       )}
 
-      {/* Le librerie, ognuna con i suoi scaffali in fila */}
-      {gruppi.map(gruppo => (
-        <section key={gruppo.id || 'senza'}>
-          <div
-            onDragOver={e => { if (trascinato) { e.preventDefault(); setSopra('lib-' + gruppo.id); } }}
-            onDragLeave={() => setSopra(x => x === 'lib-' + gruppo.id ? null : x)}
-            onDrop={e => { e.preventDefault(); rilascia(null, gruppo.id); }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
-              padding: '4px 6px', flexWrap: 'wrap',
-              background: sopra === 'lib-' + gruppo.id ? 'rgba(191,161,88,0.14)' : 'transparent',
-            }}>
-            <div className="m-eyebrow" style={{ fontSize: 12, letterSpacing: '0.08em' }}>{gruppo.name}</div>
-            <div style={{ flex: 1, height: 1, background: 'var(--cine-gold-dim)', minWidth: 20 }}/>
-            <div className="m-marginalia" style={{ fontSize: 12 }}>
-              {gruppo.scaffali.length} {gruppo.scaffali.length === 1 ? 'scaffale' : 'scaffali'}
+      {/* Le schede: una per libreria. Ci si può lasciare sopra uno scaffale
+          trascinato per spostarlo in quella libreria. */}
+      {gruppi.length > 1 && (
+        <div style={{
+          display: 'flex', gap: 4, overflowX: 'auto', flexShrink: 0,
+          borderBottom: '1px solid var(--cine-gold-dim)', scrollbarWidth: 'none',
+        }}>
+          {gruppi.map(g => {
+            const attiva = corrente && chiave(g) === chiave(corrente);
+            const sorvolata = sopra === 'lib-' + g.id;
+            return (
+              <button key={chiave(g)}
+                onClick={() => scegli(g)}
+                onDragOver={e => { if (trascinato) { e.preventDefault(); setSopra('lib-' + g.id); } }}
+                onDragLeave={() => setSopra(x => x === 'lib-' + g.id ? null : x)}
+                onDrop={e => { e.preventDefault(); rilascia(null, g.id); }}
+                title={trascinato ? 'Lascia qui per spostare lo scaffale in questa libreria' : undefined}
+                style={{
+                  flexShrink: 0, cursor: 'pointer', border: 'none',
+                  padding: '10px 18px 11px', marginBottom: -1,
+                  background: sorvolata ? 'rgba(191,161,88,0.18)' : 'transparent',
+                  borderBottom: attiva ? '2px solid var(--cine-gold)' : '2px solid transparent',
+                  fontFamily: "'Cinzel', 'Mantinia', serif", textTransform: 'uppercase',
+                  letterSpacing: '0.12em', fontSize: 15,
+                  color: attiva ? 'var(--cine-cream)' : 'var(--cine-gold-dim)',
+                }}>
+                {g.name}
+                <span className="m-nums" style={{ marginLeft: 8, fontSize: 12, opacity: 0.7, letterSpacing: 0 }}>
+                  {g.scaffali.length}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* La libreria scelta */}
+      {corrente && (
+        <section>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 18, flexWrap: 'wrap' }}>
+            <div style={{
+              fontFamily: "'Cinzel', 'Mantinia', serif", fontWeight: 400,
+              fontSize: 'clamp(24px, 6vw, 36px)', lineHeight: 1.1,
+              letterSpacing: '0.05em', textTransform: 'uppercase',
+              color: 'var(--cine-cream)', textShadow: 'var(--cine-text-shadow)',
+            }}>{corrente.name}</div>
+            <div className="m-marginalia" style={{ fontSize: 14 }}>
+              {corrente.scaffali.length} {corrente.scaffali.length === 1 ? 'scaffale' : 'scaffali'}
             </div>
-            {gruppo.id && (
-              <>
+            {corrente.id && (
+              <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
                 <button className="m-btn m-btn-ghost m-btn-sm" style={{ fontSize: 10 }}
-                  onClick={() => rinominaLibreria(gruppo)}>rinomina</button>
+                  onClick={() => rinominaLibreria(corrente)}>rinomina</button>
                 <button className="m-btn m-btn-ghost m-btn-sm" style={{ fontSize: 10 }}
-                  onClick={() => eliminaLibreria(gruppo)}>elimina</button>
-              </>
+                  onClick={() => eliminaLibreria(corrente)}>elimina</button>
+              </div>
             )}
           </div>
 
-          {gruppo.scaffali.length === 0 && (
-            <div className="m-marginalia" style={{ fontSize: 12.5, fontStyle: 'italic', padding: '4px 0 10px' }}>
-              {gruppo.id ? 'Trascina qui uno scaffale per metterlo in questa libreria.' : 'Nessuno scaffale.'}
+          {corrente.scaffali.length === 0 && (
+            <div className="m-marginalia" style={{ fontSize: 13, fontStyle: 'italic', padding: '4px 0 10px' }}>
+              {corrente.id
+                ? 'Nessuno scaffale qui. Creane uno, oppure trascina uno scaffale sulla scheda di questa libreria.'
+                : 'Nessuno scaffale.'}
             </div>
           )}
 
-          {gruppo.scaffali.map(s => (
+          {corrente.scaffali.map(sc => (
             <FilaScaffale
-              key={s.id} scaffale={s}
-              inTrascinamento={trascinato?.id === s.id}
-              sorvolato={sopra === s.id}
-              onApri={() => navigate('/scaffali/' + s.id)}
-              onMenu={e => openContextMenu(e, s)}
+              key={sc.id} scaffale={sc}
+              inTrascinamento={trascinato?.id === sc.id}
+              sorvolato={sopra === sc.id}
+              onApri={() => navigate('/scaffali/' + sc.id)}
+              onMenu={e => openContextMenu(e, sc)}
               onApriLibro={bid => navigate('/libro/' + bid)}
-              onDragStart={() => setTrasc(s)}
+              onDragStart={() => setTrasc(sc)}
               onDragEnd={() => { setTrasc(null); setSopra(null); }}
-              onDragOver={e => { if (trascinato) { e.preventDefault(); setSopra(s.id); } }}
-              onDragLeave={() => setSopra(x => x === s.id ? null : x)}
-              onDrop={e => { e.preventDefault(); rilascia(s, gruppo.id); }}
+              onDragOver={e => { if (trascinato) { e.preventDefault(); setSopra(sc.id); } }}
+              onDragLeave={() => setSopra(x => x === sc.id ? null : x)}
+              onDrop={e => { e.preventDefault(); rilascia(sc, corrente.id); }}
             />
           ))}
         </section>
-      ))}
+      )}
 
       <EbookSenzaScaffale shelves={shelves} onAggiunto={carica} />
 

@@ -391,7 +391,9 @@ export default function DettaglioScaffale() {
     <div style={{ padding: '26px 40px 70px' }}>
 
       {/* ── Intestazione ── */}
-      <button className="m-btn m-btn-ghost m-btn-sm" onClick={() => navigate('/scaffali')}
+      {/* si torna alla libreria di questo scaffale, non alla prima */}
+      <button className="m-btn m-btn-ghost m-btn-sm"
+        onClick={() => navigate('/scaffali?libreria=' + (scaffale.library_id || 'senza'))}
         style={{ fontSize: 11, marginBottom: 14 }}>‹ tutti gli scaffali</button>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
