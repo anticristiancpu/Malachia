@@ -176,9 +176,9 @@ function Etichetta({ libro, versoDestra }) {
 }
 
 /* ── il cartellino di una sezione, come una linguetta sul ripiano ──────────
-   Si rinomina con un doppio clic, si sposta trascinandola e, se è una sezione
-   vera, si elimina. Quella dei record senza sezione non si può eliminare: è
-   il posto dove vivono, e non avrebbero dove andare.                        */
+   Si rinomina con un doppio clic, si sposta trascinandola e si elimina. Anche
+   quella dei record senza sezione: i suoi volumi passano nella prima sezione,
+   e se non ce n'è nessuna la pagina lo dice invece di farlo.                */
 function Linguetta({ sezione, base, nome, conteggio, altezza, sorvolata, inTrascinamento,
                     onRinomina, onElimina,
                     onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop }) {
@@ -242,10 +242,12 @@ function Linguetta({ sezione, base, nome, conteggio, altezza, sorvolata, inTrasc
         )}
       </div>
 
-      {sopra && modifica === null && !base && (
+      {sopra && modifica === null && (
         <button
           onClick={onElimina}
-          title="elimina la sezione — i suoi volumi restano sullo scaffale"
+          title={base
+            ? 'togli questo ripiano — i suoi volumi passano nella prima sezione'
+            : 'elimina la sezione — i suoi volumi restano sullo scaffale'}
           style={{
             position: 'absolute', top: `calc(100% - ${alta}px - 9px)`, right: -4,
             width: 18, height: 18, borderRadius: '50%', zIndex: 36, padding: 0,

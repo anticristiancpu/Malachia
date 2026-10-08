@@ -62,8 +62,9 @@ export const shelves = {
     api.patch(`/shelves/${id}/books/${bookId}`,
       section_id !== undefined ? { after_book_id, section_id } : { after_book_id }).then(r => r.data),
   // sposta ('move') o copia ('copy') su un altro scaffale
-  transfer:  (id, bookId, target_shelf_id, mode = 'move') =>
-    api.post(`/shelves/${id}/books/${bookId}/transfer`, { target_shelf_id, mode }).then(r => r.data),
+  transfer:  (id, bookId, target_shelf_id, mode = 'move', section_id = null) =>
+    api.post(`/shelves/${id}/books/${bookId}/transfer`,
+      section_id ? { target_shelf_id, mode, section_id } : { target_shelf_id, mode }).then(r => r.data),
   ofBook:    (bookId) => api.get(`/shelves/of-book/${bookId}`).then(r => r.data),
   // sezioni dentro uno scaffale
   addSection:    (id, name)          => api.post(`/shelves/${id}/sections`, { name }).then(r => r.data),
@@ -84,6 +85,9 @@ export const shelves = {
       library_id !== undefined ? { after_shelf_id, library_id } : { after_shelf_id }).then(r => r.data),
   // l'etichetta dei record senza sezione: si rinomina e si sposta come le altre
   updateBase: (id, dati) => api.patch(`/shelves/${id}/base`, dati).then(r => r.data),
+  // toglie i nuovi arrivi; i volumi che c'erano vanno in section_id (o nella prima sezione)
+  deleteBase: (id, section_id) =>
+    api.delete(`/shelves/${id}/base`, { data: section_id ? { section_id } : {} }).then(r => r.data),
 };
 
 export const libraries = {

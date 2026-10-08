@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import BookCover from '../components/BookCover.jsx';
-import { books as booksApi, shelves as shelvesApi, authors as authorsApi, prices as pricesApi, stats as statsApi } from '../api/index.js';
+import { books as booksApi, authors as authorsApi, prices as pricesApi, stats as statsApi } from '../api/index.js';
 import { useToast } from '../components/Toast.jsx';
+import SceltaScaffali from '../components/SceltaScaffali.jsx';
 
 /* ── Constants ───────────────────────────────────────────────────────────────── */
 const STATUS_LABELS   = { tbr: 'da leggere', reading: 'in lettura', read: 'letti', abandoned: 'abbandonati' };
@@ -442,22 +443,29 @@ function MenuItem({ icon, label, danger, onClick, disabled }) {
 
 /* ─── BookContextMenu ───────────────────────────────────────────────────────── */
 function BookContextMenu({
-  x, y, book, shelves, shelfIds,
-  onToggle, onClose, onNavigate, onEdit, onDelete, onCreaScaffale,
+  x, y, book,
+  onClose, onNavigate, onEdit, onDelete,
 }) {
   const ref = useRef(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [nuovoNome, setNuovoNome] = useState(null);   // null = non sto creando
   const [pos, setPos] = useState({ left: x, top: y });
 
+  /* Il menu resta dentro la finestra anche quando si allunga: l'elenco degli
+     scaffali arriva dopo l'apertura, e aprire i ripiani lo fa crescere. */
   useEffect(() => {
     if (!ref.current) return;
-    const r  = ref.current.getBoundingClientRect();
-    const vw = window.innerWidth, vh = window.innerHeight;
-    setPos({
-      left: r.right  > vw ? Math.max(0, x - r.width)  : x,
-      top:  r.bottom > vh ? Math.max(0, y - r.height) : y,
-    });
+    const sistema = () => {
+      const r  = ref.current.getBoundingClientRect();
+      const vw = window.innerWidth, vh = window.innerHeight;
+      setPos({
+        left: x + r.width  > vw ? Math.max(0, vw - r.width - 4)  : x,
+        top:  y + r.height > vh ? Math.max(0, vh - r.height - 4) : y,
+      });
+    };
+    sistema();
+    const oss = new ResizeObserver(sistema);
+    oss.observe(ref.current);
+    return () => oss.disconnect();
   }, [x, y]);
 
   useEffect(() => {
@@ -523,78 +531,8 @@ function BookContextMenu({
         )}
       </div>
 
-      <div style={{ paddingTop: 4 }}>
-        <div className="m-eyebrow" style={{ fontSize: 9, letterSpacing: '0.14em', padding: '2px 14px 4px', color: 'var(--m-ink-muted)' }}>
-          Scaffali
-        </div>
-        <div style={{ maxHeight: 220, overflowY: 'auto' }}>
-          {shelves.length === 0 && nuovoNome === null ? (
-            <div style={{ padding: '8px 14px', fontSize: 12, color: 'var(--m-ink-muted)', fontStyle: 'italic' }}>
-              Nessuno scaffale creato
-            </div>
-          ) : shelves.map(shelf => {
-            const inShelf = shelfIds.has(shelf.id);
-            return (
-              <div
-                key={shelf.id}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '7px 14px', cursor: 'pointer', fontSize: 13,
-                  background: inShelf ? 'color-mix(in srgb, var(--m-terracotta) 8%, transparent)' : 'transparent',
-                  transition: 'background 100ms',
-                }}
-                onMouseEnter={e => { if (!inShelf) e.currentTarget.style.background = 'var(--m-rule)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = inShelf ? 'color-mix(in srgb, var(--m-terracotta) 8%, transparent)' : 'transparent'; }}
-                onClick={() => onToggle(shelf)}
-              >
-                <div style={{
-                  width: 15, height: 15, borderRadius: 3, flexShrink: 0,
-                  background: inShelf ? 'var(--m-terracotta)' : 'transparent',
-                  border: '1.5px solid ' + (inShelf ? 'var(--m-terracotta)' : 'var(--m-rule-strong)'),
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'all 120ms',
-                }}>
-                  {inShelf && <span style={{ color: '#fff', fontSize: 9, lineHeight: 1 }}>✓</span>}
-                </div>
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {shelf.name}
-                </span>
-                <span className="m-nums" style={{ fontSize: 11, color: 'var(--m-ink-muted)', flexShrink: 0 }}>
-                  {shelf.book_count}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Senza scaffali il menu sarebbe un vicolo cieco: se ne crea uno qui. */}
-        {nuovoNome === null ? (
-          <div
-            onClick={() => setNuovoNome('')}
-            style={{ padding: '7px 14px', cursor: 'pointer', fontSize: 12.5, color: 'var(--m-ink-muted)' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--m-rule)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >+ nuovo scaffale</div>
-        ) : (
-          <div style={{ padding: '7px 14px 9px' }}>
-            <input
-              autoFocus value={nuovoNome}
-              onChange={ev => setNuovoNome(ev.target.value)}
-              onKeyDown={ev => {
-                if (ev.key === 'Enter' && nuovoNome.trim()) { onCreaScaffale(nuovoNome.trim(), book); setNuovoNome(null); }
-                if (ev.key === 'Escape') setNuovoNome(null);
-              }}
-              placeholder="nome dello scaffale"
-              style={{
-                width: '100%', padding: '5px 7px', fontSize: 12.5, fontFamily: 'inherit',
-                background: 'transparent', color: 'var(--m-ink)', border: '1px solid var(--m-rule)',
-              }}/>
-            <div className="m-marginalia" style={{ fontSize: 10.5, marginTop: 4 }}>
-              Invio per crearlo e metterci questo libro.
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Librerie, scaffali e ripiani: lo stesso elenco di tutti i menu */}
+      <SceltaScaffali libro={book} />
 
       <div style={{ borderTop: '1px solid var(--m-rule)', padding: '5px 8px' }}>
         <div
@@ -1049,7 +987,6 @@ export default function Libreria() {
   );
   const [noValueCount, setNoValueCount] = useState(null);
   const [totalAll,     setTotalAll]     = useState(0);
-  const [shelves,      setShelves]      = useState([]);
   const [contextMenu,  setContextMenu]  = useState(null);
   const [editBook,     setEditBook]     = useState(null);
 
@@ -1107,7 +1044,6 @@ export default function Libreria() {
   function handleSetTipo(t)   { setFilterTipo(t); localStorage.setItem('malachia-tipo', t); }
 
   /* ── Data loading ── */
-  useEffect(() => { shelvesApi.list().then(setShelves).catch(() => {}); }, []);
 
   useEffect(() => {
     booksApi.list({ no_market_value: '1', limit: 1 })
@@ -1168,47 +1104,9 @@ export default function Libreria() {
   useEffect(() => { load(); }, [load]);
 
   /* ── Context menu ── */
-  async function handleBookContextMenu(e, book) {
+  function handleBookContextMenu(e, book) {
     e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, book, shelfIds: new Set(), loading: true });
-    try {
-      const r = await booksApi.shelves(book.id);
-      setContextMenu(c => c?.book.id === book.id
-        ? { ...c, shelfIds: new Set(r.shelf_ids), loading: false } : c);
-    } catch {
-      setContextMenu(c => c?.book.id === book.id ? { ...c, loading: false } : c);
-    }
-  }
-
-  async function toggleShelf(shelf) {
-    if (!contextMenu) return;
-    const { book, shelfIds } = contextMenu;
-    const inShelf = shelfIds.has(shelf.id);
-    try {
-      if (inShelf) {
-        await shelvesApi.removeBook(shelf.id, book.id);
-        setContextMenu(c => c ? { ...c, shelfIds: new Set([...c.shelfIds].filter(id => id !== shelf.id)) } : c);
-        setShelves(prev => prev.map(s => s.id === shelf.id ? { ...s, book_count: Math.max(0, (s.book_count || 0) - 1) } : s));
-        toast(`"${book.title}" rimosso da "${shelf.name}"`, 'success');
-      } else {
-        await shelvesApi.addBook(shelf.id, book.id);
-        setContextMenu(c => c ? { ...c, shelfIds: new Set([...c.shelfIds, shelf.id]) } : c);
-        setShelves(prev => prev.map(s => s.id === shelf.id ? { ...s, book_count: (s.book_count || 0) + 1 } : s));
-        toast(`"${book.title}" aggiunto a "${shelf.name}"`, 'success');
-      }
-    } catch { toast('Errore', 'error'); }
-  }
-
-  /* Creare uno scaffale dal menu e metterci subito il libro: senza questo,
-     con zero scaffali il menu non porterebbe da nessuna parte. */
-  async function creaScaffaleEAggiungi(nome, book) {
-    try {
-      const nuovo = await shelvesApi.create({ name: nome });
-      await shelvesApi.addBook(nuovo.id, book.id);
-      setShelves(prev => [...prev, { ...nuovo, book_count: 1 }]);
-      setContextMenu(c => c ? { ...c, shelfIds: new Set([...c.shelfIds, nuovo.id]) } : c);
-      toast(`"${book.title}" in "${nome}"`, 'success');
-    } catch { toast('Non è stato possibile creare lo scaffale', 'error'); }
+    setContextMenu({ x: e.clientX, y: e.clientY, book });
   }
 
   async function handleEditBook(book, data) {
@@ -1309,11 +1207,10 @@ export default function Libreria() {
       {contextMenu && (
         <BookContextMenu
           x={contextMenu.x} y={contextMenu.y}
-          book={contextMenu.book} shelves={shelves} shelfIds={contextMenu.shelfIds}
-          onToggle={toggleShelf}   onClose={() => setContextMenu(null)}
+          book={contextMenu.book}
+          onClose={() => setContextMenu(null)}
           onNavigate={handleNavigateToBook} onEdit={book => setEditBook(book)}
           onDelete={handleDeleteBook}
-          onCreaScaffale={creaScaffaleEAggiungi}
         />
       )}
 

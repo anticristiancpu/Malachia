@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import BookCover from '../components/BookCover.jsx';
 import { tipoRecord } from '../components/EbookMark.jsx';
-import { shelves as shelvesApi, books as booksApi } from '../api/index.js';
+import { shelves as shelvesApi, books as booksApi, libraries as librariesApi } from '../api/index.js';
 import { useToast } from '../components/Toast.jsx';
 import VistaMensola from '../components/VistaMensola.jsx';
 
@@ -31,19 +31,36 @@ function riepilogo(libri) {
 }
 
 /* ── Menu contestuale di una riga ─────────────────────────────────────────── */
-function MenuRiga({ x, y, libro, sezioni, sezioneCorrente, altriScaffali,
+function MenuRiga({ x, y, libro, sezioni, sezioneCorrente, altriScaffali, librerie = [], etichettaBase,
                     onSpostaInSezione, onTrasferisci, onTogli, onApri, onChiudi }) {
   const ref = useRef(null);
   const [pos, setPos] = useState({ left: x, top: y });
+  const [modo, setModo] = useState('move');        // spostare o copiare sugli altri scaffali
+  const [aperto, setAperto] = useState(null);      // scaffale di cui si vedono i ripiani
 
+  // Resta dentro la finestra anche quando si allunga aprendo i ripiani.
   useEffect(() => {
     if (!ref.current) return;
-    const r = ref.current.getBoundingClientRect();
-    setPos({
-      left: r.right > window.innerWidth ? Math.max(4, x - r.width) : x,
-      top:  r.bottom > window.innerHeight ? Math.max(4, window.innerHeight - r.height - 6) : y,
-    });
+    const sistema = () => {
+      const r = ref.current.getBoundingClientRect();
+      setPos({
+        left: x + r.width > window.innerWidth ? Math.max(4, window.innerWidth - r.width - 4) : x,
+        top:  y + r.height > window.innerHeight ? Math.max(4, window.innerHeight - r.height - 6) : y,
+      });
+    };
+    sistema();
+    const oss = new ResizeObserver(sistema);
+    oss.observe(ref.current);
+    return () => oss.disconnect();
   }, [x, y]);
+
+  /* Gli altri scaffali, raggruppati per libreria come nella pagina Scaffali. */
+  const note = new Set(librerie.map(l => l.id));
+  const gruppi = [
+    ...librerie.map(l => ({ id: l.id, nome: l.name, scaffali: altriScaffali.filter(sc => sc.library_id === l.id) })),
+    { id: null, nome: librerie.length ? 'Senza libreria' : null,
+      scaffali: altriScaffali.filter(sc => !sc.library_id || !note.has(sc.library_id)) },
+  ].filter(g => g.scaffali.length > 0);
 
   useEffect(() => {
     const giu = e => { if (ref.current && !ref.current.contains(e.target)) onChiudi(); };
@@ -83,7 +100,7 @@ function MenuRiga({ x, y, libro, sezioni, sezioneCorrente, altriScaffali,
           <Titoletto>Sposta nella sezione</Titoletto>
           {sezioni.map(s => (
             <Voce key={s.id} onClick={() => { onChiudi(); onSpostaInSezione(libro, s.id); }}>
-              {s.id === sezioneCorrente ? '• ' : '  '}{s.name || 'Sezione generica'}
+              {s.id === sezioneCorrente ? '• ' : '  '}{s.name || etichettaBase || 'Nuovi arrivi'}
             </Voce>
           ))}
         </>
@@ -91,13 +108,63 @@ function MenuRiga({ x, y, libro, sezioni, sezioneCorrente, altriScaffali,
 
       {altriScaffali.length > 0 && (
         <>
-          <Titoletto>Sposta su un altro scaffale</Titoletto>
-          {altriScaffali.map(s => (
-            <Voce key={'m' + s.id} onClick={() => { onChiudi(); onTrasferisci(libro, s.id, 'move'); }}>→ {s.name}</Voce>
-          ))}
-          <Titoletto>Copia su un altro scaffale</Titoletto>
-          {altriScaffali.map(s => (
-            <Voce key={'c' + s.id} onClick={() => { onChiudi(); onTrasferisci(libro, s.id, 'copy'); }}>⧉ {s.name}</Voce>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px 4px' }}>
+            <span className="m-eyebrow" style={{ fontSize: 9, color: 'var(--m-ink-muted)' }}>Su un altro scaffale</span>
+            <div style={{ display: 'flex', marginLeft: 'auto', border: '1px solid var(--m-rule)' }}>
+              {[['move', 'sposta'], ['copy', 'copia']].map(([k, nome]) => (
+                <button key={k} onClick={() => setModo(k)}
+                  style={{
+                    padding: '2px 9px', fontSize: 11, cursor: 'pointer', border: 'none',
+                    fontFamily: 'inherit',
+                    background: modo === k ? 'var(--m-terracotta)' : 'transparent',
+                    color: modo === k ? '#fff' : 'var(--m-ink-muted)',
+                  }}>{nome}</button>
+              ))}
+            </div>
+          </div>
+
+          {gruppi.map(g => (
+            <div key={g.id || 'senza'}>
+              {g.nome && (
+                <div className="m-eyebrow" style={{ fontSize: 8.5, letterSpacing: '0.16em',
+                  padding: '6px 14px 2px', color: 'var(--m-ink-muted)', opacity: 0.8 }}>{g.nome}</div>
+              )}
+              {g.scaffali.map(sc => {
+                const ripiani = [
+                  ...(sc.base_hidden ? [] : [{ id: null, name: sc.base_label || 'Nuovi arrivi' }]),
+                  ...(sc.sections || []),
+                ];
+                const espanso = aperto === sc.id;
+                return (
+                  <div key={sc.id}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--m-rule)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                      <div onClick={() => { onChiudi(); onTrasferisci(libro, sc.id, modo); }}
+                        style={{ flex: 1, padding: '7px 4px 7px 14px', cursor: 'pointer', fontSize: 13,
+                                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {modo === 'move' ? '→' : '⧉'} {sc.name}
+                      </div>
+                      <button onClick={() => setAperto(espanso ? null : sc.id)}
+                        title="scegli il ripiano" aria-expanded={espanso}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 12px',
+                                 fontSize: 13, color: 'var(--m-ink-muted)',
+                                 transform: espanso ? 'rotate(90deg)' : 'none', transition: 'transform 120ms' }}>›</button>
+                    </div>
+                    {espanso && ripiani.map(r => (
+                      <div key={r.id || 'base'}
+                        onClick={() => { onChiudi(); onTrasferisci(libro, sc.id, modo, r.id); }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--m-rule)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                        style={{ padding: '6px 14px 6px 36px', cursor: 'pointer', fontSize: 12.5,
+                                 fontStyle: r.id ? 'normal' : 'italic' }}>
+                        · {r.name || 'senza nome'}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
           ))}
         </>
       )}
@@ -214,12 +281,18 @@ export default function DettaglioScaffale() {
 
   useEffect(() => { carica(); }, [carica]);
   useEffect(() => { shelvesApi.list().then(setTutti).catch(() => {}); }, []);
+  const [librerie, setLibrerie] = useState([]);
+  useEffect(() => { librariesApi.list().then(setLibrerie).catch(() => {}); }, []);
 
   /* Le sezioni, con in testa quella senza nome che accoglie i nuovi arrivi. */
   const sezioni = useMemo(() => {
     if (!scaffale) return [];
+    const volumiSullaBase = (scaffale.books || []).some(b => !b.section_id);
+    const base = (!scaffale.base_hidden || volumiSullaBase)
+      ? [{ id: SEZIONE_BASE, name: null, sectionId: null, position: scaffale.base_position }]
+      : [];
     return [
-      { id: SEZIONE_BASE, name: null, sectionId: null, position: scaffale.base_position },
+      ...base,
       ...(scaffale.sections || []).map(s => ({ ...s, sectionId: s.id })),
     ];
   }, [scaffale]);
@@ -270,9 +343,9 @@ export default function DettaglioScaffale() {
     } catch { toast('Errore nello spostamento', 'error'); }
   }
 
-  async function trasferisci(libro, scaffaleId, modo) {
+  async function trasferisci(libro, scaffaleId, modo, sezioneId = null) {
     try {
-      await shelvesApi.transfer(id, libro.id, scaffaleId, modo);
+      await shelvesApi.transfer(id, libro.id, scaffaleId, modo, sezioneId);
       await carica();
       const dove = tuttiScaffali.find(s => s.id === scaffaleId)?.name || 'altro scaffale';
       toast(modo === 'move' ? `Spostato in "${dove}"` : `Copiato in "${dove}"`, 'success');
@@ -326,12 +399,37 @@ export default function DettaglioScaffale() {
   /* Eliminare una sezione: i suoi volumi tornano fra quelli senza sezione,
      restano sullo scaffale. Il cartellino base non si puo' eliminare. */
   async function eliminaEtichetta(sezioneId) {
-    if (sezioneId === SEZIONE_BASE) {
-      toast('Questo cartellino non si elimina: e\u2019 dove stanno i volumi senza sezione', 'error');
-      return;
-    }
+    if (sezioneId === SEZIONE_BASE) return eliminaBase();
     try { await shelvesApi.deleteSection(id, sezioneId); await carica(); }
     catch { toast('Errore nell\u2019eliminazione', 'error'); }
+  }
+
+  /* Togliere i nuovi arrivi. I volumi che ci sono passano nella prima
+     sezione, dopo averlo detto; senza altre sezioni non si può, perché
+     quei libri non avrebbero un posto visibile. */
+  async function eliminaBase() {
+    const quanti = (scaffale.books || []).filter(b => !b.section_id).length;
+    const prima = (scaffale.sections || [])[0];
+    if (quanti > 0 && !prima) {
+      toast(`Su «${etichettaBase}» ci sono ${quanti} volumi e nessun'altra sezione dove spostarli: crea prima una sezione`, 'error');
+      return;
+    }
+    const domanda = quanti > 0
+      ? `Togliere «${etichettaBase}»? I suoi ${quanti} volumi passano in «${prima.name || 'senza nome'}».`
+      : `Togliere «${etichettaBase}» da questo scaffale?`;
+    if (!window.confirm(domanda)) return;
+    try {
+      const r = await shelvesApi.deleteBase(id);
+      await carica();
+      toast(r.volumi_spostati
+        ? `«${etichettaBase}» tolto, ${r.volumi_spostati} volumi in «${prima.name || 'senza nome'}»`
+        : `«${etichettaBase}» tolto`, 'success');
+    } catch (e) { toast(e?.response?.data?.error || 'Non è stato possibile toglierlo', 'error'); }
+  }
+
+  async function rimettiBase() {
+    try { await shelvesApi.updateBase(id, { hidden: false }); await carica(); }
+    catch { toast('Errore', 'error'); }
   }
 
   /* Spostare un cartellino dopo un altro (null = in testa). */
@@ -424,6 +522,10 @@ export default function DettaglioScaffale() {
             {fisico ? '▦ fisico' : '◇ tematico'}
           </button>
           <button className="m-btn m-btn-ghost m-btn-sm" onClick={nuovaSezione}>+ sezione</button>
+          {scaffale.base_hidden ? (
+            <button className="m-btn m-btn-ghost m-btn-sm" onClick={rimettiBase}
+              title="Rimette il ripiano dei volumi senza sezione">+ {etichettaBase.toLowerCase()}</button>
+          ) : null}
         </div>
       </div>
 
@@ -511,6 +613,9 @@ export default function DettaglioScaffale() {
             <IntestazioneSezione
               sezione={sez} base={base} conteggio={righe.length}
               scaffaleId={id} onCambiato={carica} toast={toast}
+              etichettaBase={etichettaBase}
+              onRinominaBase={nome => rinominaEtichetta(SEZIONE_BASE, nome)}
+              onEliminaBase={eliminaBase}
             />
 
             {righe.length === 0 && (
@@ -565,6 +670,8 @@ export default function DettaglioScaffale() {
           x={menu.x} y={menu.y} libro={menu.libro}
           sezioni={sezioni} sezioneCorrente={menu.sezione}
           altriScaffali={altriScaffali}
+          librerie={librerie}
+          etichettaBase={etichettaBase}
           onSpostaInSezione={spostaInSezione}
           onTrasferisci={trasferisci}
           onTogli={togli}
@@ -577,7 +684,8 @@ export default function DettaglioScaffale() {
 }
 
 /* ── Intestazione di una sezione (rinomina / elimina) ─────────────────────── */
-function IntestazioneSezione({ sezione, base, conteggio, scaffaleId, onCambiato, toast }) {
+function IntestazioneSezione({ sezione, base, conteggio, scaffaleId, onCambiato, toast,
+                               etichettaBase, onRinominaBase, onEliminaBase }) {
   const [rinomino, setRinomino] = useState(false);
   const [val, setVal] = useState('');
   const [conferma, setConferma] = useState(false);
@@ -585,11 +693,14 @@ function IntestazioneSezione({ sezione, base, conteggio, scaffaleId, onCambiato,
   async function salva() {
     const v = val.trim();
     setRinomino(false);
+    if (base) { if (v && v !== etichettaBase) onRinominaBase(v); return; }
     if (v === (sezione.name || '')) return;
     try { await shelvesApi.updateSection(scaffaleId, sezione.id, { name: v || null }); onCambiato(); }
     catch { toast('Errore nella rinomina', 'error'); }
   }
   async function elimina() {
+    setConferma(false);
+    if (base) return onEliminaBase();
     try {
       await shelvesApi.deleteSection(scaffaleId, sezione.id);
       onCambiato();
@@ -606,23 +717,24 @@ function IntestazioneSezione({ sezione, base, conteggio, scaffaleId, onCambiato,
           style={{ fontSize: 17, fontFamily: "'EB Garamond', serif", padding: '2px 8px', flex: '0 1 300px' }}/>
       ) : (
         <div className="m-serif"
-          onDoubleClick={() => { if (!base) { setVal(sezione.name || ''); setRinomino(true); } }}
-          title={base ? undefined : 'Doppio clic per rinominare'}
-          style={{ fontSize: 19, fontWeight: 500, flexShrink: 0, cursor: base ? 'default' : 'text' }}>
-          {sezione.name || 'Sezione generica'}
+          onDoubleClick={() => { setVal(base ? etichettaBase : (sezione.name || '')); setRinomino(true); }}
+          title="Doppio clic per rinominare"
+          style={{ fontSize: 19, fontWeight: 500, flexShrink: 0, cursor: 'text',
+                   fontStyle: base ? 'italic' : 'normal' }}>
+          {base ? etichettaBase : (sezione.name || 'Sezione senza nome')}
         </div>
       )}
 
       <div style={{ flex: 1, height: 1, background: 'var(--m-rule)' }}/>
       <span className="m-nums" style={{ fontSize: 11, color: 'var(--m-ink-muted)' }}>{conteggio}</span>
 
-      {!base && !conferma && (
+      {!conferma && (
         <button className="m-btn m-btn-ghost m-btn-sm" style={{ fontSize: 10 }}
           onClick={() => setConferma(true)}>✕</button>
       )}
-      {!base && conferma && (
+      {conferma && (
         <span style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-          <span style={{ fontSize: 11, color: 'var(--m-ink-muted)' }}>eliminare la sezione?</span>
+          <span style={{ fontSize: 11, color: 'var(--m-ink-muted)' }}>{base ? 'togliere questo ripiano?' : 'eliminare la sezione?'}</span>
           <button className="m-btn m-btn-sm" style={{ fontSize: 10 }} onClick={elimina}>sì</button>
           <button className="m-btn m-btn-ghost m-btn-sm" style={{ fontSize: 10 }} onClick={() => setConferma(false)}>no</button>
         </span>

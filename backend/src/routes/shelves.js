@@ -82,6 +82,21 @@ function rinumera(db, shelfId, sectionId) {
 }
 
 /* Posizione in coda a una sezione. */
+/* Dove va un libro arrivato senza sezione. Di solito sui nuovi arrivi; ma se
+   quel ripiano è stato tolto va sulla prima sezione, altrimenti finirebbe in
+   un posto che non si vede. Se lo scaffale non ha più sezioni, i nuovi arrivi
+   tornano: un libro deve sempre avere un posto visibile.                     */
+function sezioneDiArrivo(db, shelfId, sectionId) {
+  if (sectionId) return sectionId;
+  const scaffale = db.prepare('SELECT base_hidden FROM shelves WHERE id = ?').get(shelfId);
+  if (!scaffale?.base_hidden) return null;
+  const prima = db.prepare(`SELECT id FROM shelf_sections WHERE shelf_id = ?
+                             ORDER BY position IS NULL, position, created_at LIMIT 1`).get(shelfId);
+  if (prima) return prima.id;
+  db.prepare('UPDATE shelves SET base_hidden = 0 WHERE id = ?').run(shelfId);
+  return null;
+}
+
 function posizioneInCoda(db, shelfId, sectionId) {
   const r = db.prepare(`
     SELECT MAX(position) AS m FROM shelf_books WHERE shelf_id = ? AND section_id IS ?
@@ -128,11 +143,24 @@ router.get('/', (req, res) => {
     ORDER BY s.position IS NULL, s.position, s.name COLLATE NOCASE
   `).all();
 
+  /* Le sezioni di tutti gli scaffali in una sola lettura: servono ai menu per
+     scegliere il ripiano senza una richiesta per ogni scaffale. */
+  const perScaffale = new Map();
+  for (const sez of db.prepare(`
+      SELECT id, shelf_id, name FROM shelf_sections
+       ORDER BY shelf_id, position IS NULL, position, created_at`).all()) {
+    if (!perScaffale.has(sez.shelf_id)) perScaffale.set(sez.shelf_id, []);
+    perScaffale.get(sez.shelf_id).push({ id: sez.id, name: sez.name });
+  }
+
   res.json(scaffali.map(s => ({
     ...s,
     kind: s.kind || 'tematico',
     // i cartacei sono quel che resta
     cartaceo_count: Math.max(0, s.book_count - s.ebook_count - s.opera_count),
+    base_label: s.base_label || 'Nuovi arrivi',
+    base_hidden: s.base_hidden ? 1 : 0,
+    sections: perScaffale.get(s.id) || [],
   })));
 });
 
@@ -217,6 +245,7 @@ router.get('/:id', (req, res) => {
     cover_height: shelf.cover_height || 130,
     base_label: shelf.base_label || 'Nuovi arrivi',
     base_position: shelf.base_position,
+    base_hidden: shelf.base_hidden ? 1 : 0,
     show_ebooks: shelf.show_ebooks === 0 ? 0 : 1,
     sections, books,
   });
@@ -288,8 +317,9 @@ router.delete('/:id', (req, res) => {
    Senza after_book_id il record va in coda alla sezione.                   */
 router.post('/:id/books', (req, res) => {
   const db = getDb();
-  const { book_id, section_id = null, after_book_id = null } = req.body;
+  const { book_id, after_book_id = null } = req.body;
   if (!book_id) return res.status(400).json({ error: 'book_id richiesto' });
+  const section_id = sezioneDiArrivo(db, req.params.id, req.body.section_id || null);
 
   const esiste = db.prepare('SELECT id FROM books WHERE id = ?').get(book_id);
   if (!esiste) return res.status(404).json({ error: 'Record non trovato in catalogo' });
@@ -330,8 +360,9 @@ router.patch('/:id/books/:bookId', (req, res) => {
    Corpo: { target_shelf_id, mode: 'move' | 'copy', section_id? }           */
 router.post('/:id/books/:bookId/transfer', (req, res) => {
   const db = getDb();
-  const { target_shelf_id, mode = 'move', section_id = null } = req.body;
+  const { target_shelf_id, mode = 'move' } = req.body;
   if (!target_shelf_id) return res.status(400).json({ error: 'target_shelf_id richiesto' });
+  const section_id = sezioneDiArrivo(db, target_shelf_id, req.body.section_id || null);
 
   const destinazione = db.prepare('SELECT id FROM shelves WHERE id = ?').get(target_shelf_id);
   if (!destinazione) return res.status(404).json({ error: 'Scaffale di destinazione non trovato' });
@@ -491,8 +522,11 @@ router.patch('/:id/base', (req, res) => {
   const db = getDb();
   const scaffale = db.prepare('SELECT * FROM shelves WHERE id = ?').get(req.params.id);
   if (!scaffale) return res.status(404).json({ error: 'Scaffale non trovato' });
-  const { label, after_section_id } = req.body;
+  const { label, after_section_id, hidden } = req.body;
 
+  if (hidden === false) {
+    db.prepare('UPDATE shelves SET base_hidden = 0 WHERE id = ?').run(req.params.id);
+  }
   if (label !== undefined) {
     db.prepare('UPDATE shelves SET base_label = ? WHERE id = ?')
       .run(String(label).trim() || null, req.params.id);
@@ -510,15 +544,58 @@ router.patch('/:id/base', (req, res) => {
    restano sullo scaffale, non si perde nulla. */
 router.delete('/:id/sections/:sectionId', (req, res) => {
   const db = getDb();
+  let destinazione = null;
   const esegui = db.transaction(() => {
-    db.prepare('UPDATE shelf_books SET section_id = NULL WHERE shelf_id = ? AND section_id = ?')
-      .run(req.params.id, req.params.sectionId);
     db.prepare('DELETE FROM shelf_sections WHERE id = ? AND shelf_id = ?')
       .run(req.params.sectionId, req.params.id);
+    // Di solito i volumi vanno sui nuovi arrivi; se quel ripiano è tolto,
+    // sulla prima sezione rimasta, o i nuovi arrivi tornano.
+    destinazione = sezioneDiArrivo(db, req.params.id, null);
+    db.prepare('UPDATE shelf_books SET section_id = ? WHERE shelf_id = ? AND section_id = ?')
+      .run(destinazione, req.params.id, req.params.sectionId);
   });
   esegui();
-  rinumera(db, req.params.id, null);
-  res.json({ ok: true });
+  rinumera(db, req.params.id, destinazione);
+  res.json({ ok: true, volumi_spostati_in: destinazione });
+});
+
+/* ── DELETE /api/shelves/:id/base — toglie il ripiano dei nuovi arrivi ─────
+   { section_id? } dove spostare i volumi che c'erano; senza, la prima sezione.
+   Se ci sono volumi e nessuna sezione dove metterli, non si può: un libro non
+   deve finire in un ripiano che non si vede.                                */
+router.delete('/:id/base', (req, res) => {
+  const db = getDb();
+  const scaffale = db.prepare('SELECT id FROM shelves WHERE id = ?').get(req.params.id);
+  if (!scaffale) return res.status(404).json({ error: 'Scaffale non trovato' });
+
+  const volumi = db.prepare(
+    'SELECT book_id FROM shelf_books WHERE shelf_id = ? AND section_id IS NULL ORDER BY position IS NULL, position'
+  ).all(req.params.id);
+  const sezioni = db.prepare(
+    'SELECT id FROM shelf_sections WHERE shelf_id = ? ORDER BY position IS NULL, position, created_at'
+  ).all(req.params.id);
+
+  let destinazione = null;
+  if (volumi.length) {
+    destinazione = req.body?.section_id && sezioni.some(x => x.id === req.body.section_id)
+      ? req.body.section_id
+      : sezioni[0]?.id;
+    if (!destinazione) {
+      return res.status(409).json({
+        error: 'Ci sono volumi sui nuovi arrivi e nessun\'altra sezione dove spostarli: crea prima una sezione.',
+      });
+    }
+  }
+
+  db.transaction(() => {
+    // in coda alla destinazione, nell'ordine che avevano
+    const upd = db.prepare('UPDATE shelf_books SET section_id = ?, position = ? WHERE shelf_id = ? AND book_id = ?');
+    for (const v of volumi) {
+      upd.run(destinazione, posizioneInCoda(db, req.params.id, destinazione), req.params.id, v.book_id);
+    }
+    db.prepare('UPDATE shelves SET base_hidden = 1 WHERE id = ?').run(req.params.id);
+  })();
+  res.json({ ok: true, volumi_spostati: volumi.length, in_sezione: destinazione });
 });
 
 /* ── Immagine di sfondo dello scaffale (invariato) ───────────────────────── */

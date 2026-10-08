@@ -8,7 +8,7 @@ const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../../data/malac
 // Versione dello schema. Va alzata di uno ogni volta che si aggiunge una
 // migrazione: è questo numero a dire se c'è davvero qualcosa da applicare,
 // e quindi se serve un backup prima di toccare il database.
-const VERSIONE_SCHEMA = 6;
+const VERSIONE_SCHEMA = 7;
 
 // Quante copie di sicurezza tenere accanto al database.
 const BACKUP_DA_TENERE = 5;
@@ -226,6 +226,9 @@ function runMigrations() {
 
     // La mensola diventa il modo predefinito di guardare uno scaffale
     "UPDATE shelves SET view_mode = 'mensola' WHERE COALESCE(view_mode,'') IN ('', 'elenco')",
+
+    // Il ripiano dei nuovi arrivi si può togliere da uno scaffale
+    'ALTER TABLE shelves ADD COLUMN base_hidden INTEGER DEFAULT 0',
   ];
   for (const m of migrations) {
     try { db.exec(m); } catch {}
