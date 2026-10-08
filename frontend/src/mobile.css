@@ -1,0 +1,283 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   Malachia sul telefono.
+
+   Ogni regola di questo file sta dentro la @media qui sotto: sopra la soglia
+   non vale nulla e il desktop resta esattamente com'era. La soglia è la
+   stessa di hooks/useIsMobile.js — se si cambia qui, si cambia anche lì.
+
+   Molti stili dell'app sono scritti in linea negli elementi, e una regola di
+   foglio di stile non li batte: per questo qui compare spesso !important. Le
+   classi usate (libro-*, lib-*, pannelli-*, studio-*, nav-mob-*) sul desktop
+   non hanno nessuna regola: servono solo da aggancio.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 820px) {
+
+  /* ── Barra in alto, corta ─────────────────────────────────────────────── */
+  .cine-topbar--mobile {
+    height: 52px;
+    padding: 0 10px 0 14px;
+    gap: 6px;
+  }
+  .nav-mob-marchio {
+    margin-right: auto;
+    background: none; border: none; padding: 0; cursor: pointer;
+    font-family: 'UnifrakturCook', serif;
+    font-size: 26px; line-height: 1;
+    color: var(--cine-cream);
+    text-shadow: var(--cine-text-shadow);
+  }
+  .nav-mob-conteggio {
+    display: flex; align-items: center; gap: 5px;
+    margin-right: 4px;
+    color: var(--cine-text-dim);
+    font-family: 'Cinzel', 'Mantinia', serif;
+    font-size: 15px;
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+  .nav-mob-conteggio span { color: var(--cine-cream); }
+  .nav-mob-conteggio .nav-mob-fisici { opacity: 0.55; font-size: 13px; }
+  .nav-mob-azione {
+    width: 40px; height: 40px;
+    display: flex; align-items: center; justify-content: center;
+    background: none; cursor: pointer;
+    border: 1px solid color-mix(in srgb, var(--cine-gold) 22%, transparent);
+    color: rgba(232,220,192,0.8);
+  }
+  .nav-mob-azione--primaria {
+    color: var(--cine-gold);
+    border-color: color-mix(in srgb, var(--cine-gold) 45%, transparent);
+  }
+
+  /* ── Area del contenuto: fra le due barre ─────────────────────────────── */
+  .cine-main {
+    top: 52px;
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* ── Barra in basso ───────────────────────────────────────────────────── */
+  .nav-mob {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    z-index: 20;
+    height: calc(60px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    background: rgba(8,6,3,0.94);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border-top: 1px solid color-mix(in srgb, var(--cine-gold) 22%, transparent);
+  }
+  .nav-mob-tasto {
+    position: relative;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 4px;
+    background: none; border: none; cursor: pointer;
+    color: rgba(232,220,192,0.55);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .nav-mob-tasto span {
+    font-family: 'Cinzel', 'Mantinia', serif;
+    font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase;
+  }
+  .nav-mob-tasto.attivo { color: var(--cine-gold); }
+  .nav-mob-tasto.attivo::before {
+    content: ''; position: absolute; top: 0; left: 28%; right: 28%;
+    height: 2px; background: var(--cine-gold);
+  }
+
+  /* ── Pannello "Altro" ─────────────────────────────────────────────────── */
+  .nav-mob-velo {
+    position: fixed; inset: 0; z-index: 19;
+    background: rgba(0,0,0,0.55);
+    display: flex; align-items: flex-end;
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+  }
+  .nav-mob-pannello {
+    width: 100%;
+    background: rgba(13,9,5,0.98);
+    border-top: 1px solid color-mix(in srgb, var(--cine-gold) 30%, transparent);
+    padding: 8px 0 10px;
+    display: grid; grid-template-columns: 1fr 1fr;
+    animation: nav-mob-sale 160ms ease-out;
+  }
+  .nav-mob-maniglia {
+    grid-column: 1 / -1;
+    width: 36px; height: 4px; margin: 2px auto 8px;
+    background: rgba(232,220,192,0.22); border-radius: 2px;
+  }
+  .nav-mob-voce {
+    min-height: 50px; padding: 0 20px;
+    text-align: left; background: none; border: none; cursor: pointer;
+    font-family: 'Cinzel', 'Mantinia', serif;
+    font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--cine-cream);
+    border-top: 1px solid rgba(232,220,192,0.06);
+  }
+  .nav-mob-voce.attiva { color: var(--cine-gold); }
+  @keyframes nav-mob-sale {
+    from { transform: translateY(18px); opacity: 0; }
+    to   { transform: none; opacity: 1; }
+  }
+
+  /* ── Margini delle pagine ─────────────────────────────────────────────────
+     Le pagine hanno margini laterali da 36–64 px, scritti in linea: su un
+     telefono si mangerebbero un quarto dello schermo.                      */
+  .cine-main > div {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  /* ── Titoli delle pagine ──────────────────────────────────────────────────
+     Sono tutti Cinzel fra 38 e 50 px, scritti in linea: li si riconosce dalla
+     dimensione. Il sottotitolo in corsivo accanto scende di conseguenza.   */
+  [style*="font-size: 38px"], [style*="font-size: 40px"],
+  [style*="font-size: 42px"], [style*="font-size: 44px"],
+  [style*="font-size: 46px"], [style*="font-size: 48px"],
+  [style*="font-size: 50px"] {
+    font-size: 28px !important;
+    line-height: 1.12 !important;
+  }
+  em[style*="font-size: 22px"] { font-size: 15px !important; }
+
+  /* ── Studio ───────────────────────────────────────────────────────────── */
+  .studio-titolo {
+    font-size: clamp(40px, 14vw, 76px) !important;
+  }
+  .studio-sigillo {
+    width: 96vw !important;
+    height: 96vw !important;
+  }
+
+  /* ── Scheda del libro: una colonna, scorre la pagina ──────────────────── */
+  .libro-pagina {
+    height: auto !important;
+    min-height: 100%;
+    overflow: visible !important;
+    padding-top: 12px !important;
+    padding-bottom: 28px !important;
+  }
+  .libro-griglia {
+    /* minmax(0, …): un 1fr da solo non scende sotto il contenuto più largo */
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 22px !important;
+    flex: none !important;
+  }
+  .libro-griglia > * { min-width: 0; }
+  .libro-copertina {
+    width: min(62vw, 260px) !important;
+    height: calc(min(62vw, 260px) * 1.421) !important;
+  }
+  .libro-copertina > .m-book {
+    width: 100% !important;
+    height: 100% !important;
+  }
+  .libro-schede {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .libro-schede::-webkit-scrollbar { display: none; }
+  .libro-schede > button { flex-shrink: 0; }
+  .libro-scorrevole {
+    flex: none !important;
+    overflow: visible !important;
+    padding-right: 0 !important;
+    mask-image: none !important;
+    -webkit-mask-image: none !important;
+  }
+
+  /* ── Libreria: la barra degli strumenti va a capo ─────────────────────── */
+  .lib-barra {
+    height: auto !important;
+  }
+  .lib-barra-dentro {
+    position: static !important;
+    flex-wrap: wrap;
+    gap: 8px 10px !important;
+    padding: 10px 12px !important;
+  }
+
+  /* il contenitore della griglia ha margini propri, oltre a quelli di pagina */
+  .lib-elenco {
+    padding: 16px 0 20px !important;
+  }
+
+  /* ── Autori ed Editori: un pannello alla volta ────────────────────────── */
+  .pannelli-testa {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 12px;
+  }
+  .pannelli-strumenti {
+    flex-wrap: wrap;
+  }
+  .pannelli-strumenti .m-searchbar {
+    width: 100% !important;
+  }
+  .pannelli-elenco {
+    width: 100% !important;
+    border-right: none !important;
+  }
+  .pannelli-pagina:not(.con-scelta) .pannelli-dettaglio { display: none !important; }
+  .pannelli-pagina.con-scelta .pannelli-elenco         { display: none !important; }
+  .pannelli-indietro { align-self: flex-start; margin: 10px 0 2px; }
+}
+
+@media (max-width: 820px) {
+
+  /* ── Annales: una colonna, schede che scorrono di lato ──────────────────
+     Le griglie vanno da 2 a 5 colonne e alcune carte si estendono su più
+     colonne: su una colonna sola quell'estensione creerebbe colonne in più,
+     quindi la si annulla.                                                   */
+  .annales-pagina {
+    height: auto !important;
+    min-height: 100%;
+    overflow: visible !important;
+    padding-bottom: 28px !important;
+  }
+  .annales-pagina [style*="grid-template-columns"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .annales-pagina [style*="grid-column"] {
+    grid-column: auto !important;
+  }
+  .annales-pagina [style*="overflow-y: auto"],
+  .annales-pagina [style*="overflow: auto"] {
+    overflow: visible !important;
+  }
+  .annales-schede {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .annales-schede::-webkit-scrollbar { display: none; }
+
+  /* ── Impostazioni: una colonna ────────────────────────────────────────── */
+  .impostazioni-pagina [style*="grid-template-columns"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .impostazioni-pagina [style*="gap: 0px 60px"] {
+    gap: 0 !important;
+  }
+
+  /* ── Aggiungi: i campi di ricerca uno sotto l'altro ───────────────────── */
+  .aggiungi-ricerca {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  /* ── Grafo: la costellazione sopra, il pannello sotto ─────────────────── */
+  .grafo-pagina {
+    grid-template-columns: minmax(0, 1fr) !important;
+    height: auto !important;
+    min-height: 100%;
+  }
+  .grafo-pagina > * { min-width: 0; }
+}
+
+@media (max-width: 820px) {
+  /* Il tocco lungo apre il menu di Malachia: su iPhone, sopra un'immagine,
+     comparirebbe invece quello di sistema per salvarla. */
+  .m-book, .m-book img {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}

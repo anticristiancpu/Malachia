@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { stats } from '../api/index.js';
+import useIsMobile from '../hooks/useIsMobile.js';
+import { BarraAltaMobile } from './NavMobile.jsx';
 
 const TABS = [
   { label: 'Studio',     path: '/',           end: true },
@@ -92,6 +94,7 @@ function DiamondMarker() {
 export default function TopBar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const mobile = useIsMobile();
   const [totalBooks, setTotalBooks] = useState(null);
   const [totalFisici, setTotalFisici] = useState(null);
   const [totalValue, setTotalValue] = useState(null);
@@ -141,6 +144,9 @@ export default function TopBar() {
   };
 
   const isDropdownItemActive = (item) => isSubOf(item.path);
+
+  // Sul telefono le schede non ci starebbero: barra corta, navigazione in basso.
+  if (mobile) return <BarraAltaMobile totale={totalBooks} fisici={totalFisici} />;
 
   return (
     <header className="cine-topbar">

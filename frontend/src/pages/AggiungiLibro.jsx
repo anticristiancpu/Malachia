@@ -1439,7 +1439,7 @@ export default function AggiungiLibro() {
       {/* ── CERCA ONLINE ── */}
       {method === 'search' && (
         <div style={{ marginTop: 28 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr 1fr auto', gap: 10, alignItems: 'flex-end' }}>
+          <div className="aggiungi-ricerca" style={{ display: 'grid', gridTemplateColumns: '180px 1fr 1fr auto', gap: 10, alignItems: 'flex-end' }}>
             <div className="m-field">
               <label>ISBN</label>
               <input className="m-input m-mono" style={{ padding: '8px 10px', fontSize: 14 }}

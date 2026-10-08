@@ -673,7 +673,7 @@ export default function Impostazioni() {
   );
 
   return (
-    <div style={{ padding: '28px 48px 56px' }}>
+    <div className="impostazioni-pagina" style={{ padding: '28px 48px 56px' }}>
 
       {/* Header */}
       <div className="m-eyebrow">Configuratio</div>

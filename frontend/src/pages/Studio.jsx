@@ -77,6 +77,7 @@ export default function Studio() {
       }}>
         {/* Sigil emblem SVG — tutti i colori seguono var(--cine-gold) */}
         <svg
+          className="studio-sigillo"
           width="720" height="720" viewBox="0 0 720 720"
           style={{
             position: 'absolute',
@@ -153,7 +154,7 @@ export default function Studio() {
         </svg>
 
         {/* MALACHIA title */}
-        <h1 style={{
+        <h1 className="studio-titolo" style={{
           position: 'relative',
           zIndex: 2,
           margin: 0,

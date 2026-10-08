@@ -484,7 +484,7 @@ export default function DettaglioLibro() {
   };
 
   return (
-    <div style={{ padding: '24px 64px 24px', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', boxSizing: 'border-box' }}>
+    <div className="libro-pagina" style={{ padding: '24px 64px 24px', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', boxSizing: 'border-box' }}>
 
       {/* ── Back link ──────────────────────────────────────────────────── */}
       <div style={{ marginBottom: 8, flexShrink: 0 }}>
@@ -502,13 +502,13 @@ export default function DettaglioLibro() {
       </div>
 
       {/* ── Main grid ─────────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 56, flex: 1, minHeight: 0 }}>
+      <div className="libro-griglia" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 56, flex: 1, minHeight: 0 }}>
 
         {/* ════════════ LEFT COLUMN ════════════ */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative', minHeight: 0 }}>
 
           {/* Cover + shadow stack */}
-          <div style={{
+          <div className="libro-copertina" style={{
             width: 380, height: 540, flexShrink: 0, position: 'relative', overflow: 'hidden',
             boxShadow:
               'inset 0 0 0 1px rgba(0,0,0,0.35), ' +
@@ -705,7 +705,7 @@ export default function DettaglioLibro() {
           </div>
 
           {/* Tab bar */}
-          <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid rgba(216,180,106,0.18)', marginBottom: 20, flexShrink: 0 }}>
+          <div className="libro-schede" style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid rgba(216,180,106,0.18)', marginBottom: 20, flexShrink: 0 }}>
             {[
               { id: 'sinossi',   label: 'Sinossi'   },
               { id: 'frammenti', label: 'Frammenti' },
@@ -734,7 +734,7 @@ export default function DettaglioLibro() {
           </div>
 
           {/* ── Scrollable content ── */}
-          <div style={{
+          <div className="libro-scorrevole" style={{
             flex: 1, overflowY: 'auto', paddingRight: 18,
             maskImage: 'linear-gradient(180deg, transparent 0%, black 24px, black calc(100% - 36px), transparent 100%)',
             WebkitMaskImage: 'linear-gradient(180deg, transparent 0%, black 24px, black calc(100% - 36px), transparent 100%)',

@@ -4,6 +4,7 @@ import BookCover from '../components/BookCover.jsx';
 import { ORN } from '../components/ORN.jsx';
 import { publishers as publishersApi, books as booksApi } from '../api/index.js';
 import { useToast } from '../components/Toast.jsx';
+import useIsMobile from '../hooks/useIsMobile.js';
 
 const LS_COLLANE_ORDER = 'malachia-collane-orders';
 function loadCollaneOrder() {
@@ -341,6 +342,8 @@ export default function Editori() {
 
   /* ── Right panel ── */
   const [selected,     setSelected]     = useState(null);
+  // Sul telefono si vede l'elenco oppure un editore, mai i due affiancati.
+  const mobile = useIsMobile();
   const [books,        setBooks]        = useState([]);
   const [booksLoading, setBooksLoading] = useState(false);
 
@@ -651,10 +654,10 @@ export default function Editori() {
      RENDER
   ══════════════════════════════════════════════════════════════════ */
   return (
-    <div style={{ padding: '28px 36px 0', display: 'flex', flexDirection: 'column', gap: 18, height: '100%', overflow: 'hidden' }}>
+    <div className={'pannelli-pagina' + (selected ? ' con-scelta' : '')} style={{ padding: '28px 36px 0', display: 'flex', flexDirection: 'column', gap: 18, height: '100%', overflow: 'hidden' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexShrink: 0 }}>
+      <div className="pannelli-testa" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexShrink: 0 }}>
         <div>
           <div className="m-eyebrow" style={{ marginBottom: 4 }}>Capitulum VI</div>
           <div style={{
@@ -671,7 +674,7 @@ export default function Editori() {
             }}>· {total}</em>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="pannelli-strumenti" style={{ display: 'flex', gap: 8 }}>
           <div className="m-searchbar" style={{ width: 220 }}>
             <ORN.quill size={14} style={{ color: 'var(--m-ink-muted)' }}/>
             <input placeholder="cerca editore…" value={search} onChange={e => setSearch(e.target.value)}/>
@@ -691,7 +694,7 @@ export default function Editori() {
       <div style={{ borderTop: '1px solid var(--cine-gold-dim)', flex: 1, display: 'flex', minHeight: 0 }}>
 
         {/* ── Pannello sinistro ── */}
-        <div style={{ width: 260, borderRight: '1px solid var(--m-rule)', overflowY: 'auto', flexShrink: 0 }}>
+        <div className="pannelli-elenco" style={{ width: 260, borderRight: '1px solid var(--m-rule)', overflowY: 'auto', flexShrink: 0 }}>
           {loading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><div className="m-spinner"/></div>
           ) : sortedPublishers.length === 0 ? (
@@ -768,7 +771,11 @@ export default function Editori() {
         </div>
 
         {/* ── Pannello destro ── */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
+        <div className="pannelli-dettaglio" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
+          {mobile && selected && (
+            <button className="m-btn m-btn-ghost m-btn-sm pannelli-indietro"
+              onClick={() => setSelected(null)}>‹ tutti gli editori</button>
+          )}
           {!selected ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
               <div className="m-serif" style={{ fontSize: 20, fontStyle: 'italic', color: 'var(--m-ink-muted)' }}>

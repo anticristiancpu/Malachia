@@ -165,8 +165,8 @@ function FilterStrip({
   };
 
   return (
-    <div style={stripStyle}>
-      <div style={{
+    <div className="lib-barra" style={stripStyle}>
+      <div className="lib-barra-dentro" style={{
         position: 'absolute', inset: 0, padding: '0 28px',
         display: 'flex', alignItems: 'center', gap: 18,
       }}>
@@ -1255,7 +1255,7 @@ export default function Libreria() {
         cardW={cardW} onZoom={onZoom}
       />
 
-      <div style={{ padding: '24px 56px 24px' }}>
+      <div className="lib-elenco" style={{ padding: '24px 56px 24px' }}>
         {loading && books.length === 0 ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
             <div className="m-spinner"/>

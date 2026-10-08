@@ -103,7 +103,7 @@ const TABS = [
 
 function TabBar({ active, onChange }) {
   return (
-    <div style={{ display: 'flex', borderBottom: '1px solid var(--cine-gold-dim)', flexShrink: 0 }}>
+    <div className="annales-schede" style={{ display: 'flex', borderBottom: '1px solid var(--cine-gold-dim)', flexShrink: 0 }}>
       {TABS.map(t => {
         const isActive = t.id === active;
         return (
@@ -146,7 +146,7 @@ export default function Annales() {
   );
 
   return (
-    <div style={{ padding: '28px 36px 0', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div className="annales-pagina" style={{ padding: '28px 36px 0', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
       {/* ── Header ── */}
       <div style={{ marginBottom: 20, flexShrink: 0 }}>

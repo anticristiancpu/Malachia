@@ -1,11 +1,17 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
 import TopBar from './TopBar.jsx';
+import NavMobile from './NavMobile.jsx';
+import useIsMobile from '../hooks/useIsMobile.js';
+import useToccoLungo from '../hooks/useToccoLungo.js';
 import { AppContext } from '../AppContext.jsx';
 
 const FADE_MS = 2400;
 
 export default function CinematicShell({ children }) {
   const { bgImageUrl } = useContext(AppContext);
+  const mobile = useIsMobile();
+  // sul telefono il tocco lungo fa le veci del tasto destro
+  useToccoLungo(mobile);
 
   // back = immagine correntemente visibile (opacity 1)
   // front = immagine in arrivo (fade 0 → 1 sopra back)
@@ -93,6 +99,9 @@ export default function CinematicShell({ children }) {
       <main className="cine-main">
         {children}
       </main>
+
+      {/* Sul telefono la navigazione sta in basso; sul desktop non esiste. */}
+      {mobile && <NavMobile />}
     </div>
   );
 }

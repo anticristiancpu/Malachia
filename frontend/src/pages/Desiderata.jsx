@@ -54,8 +54,8 @@ const IconStack = () => (
 
 function DesiderataStrip({ count, searchOpen, onToggleSearch, onManuale }) {
   return (
-    <div style={stripStyle}>
-      <div style={{ position: 'absolute', inset: 0, padding: '0 28px', display: 'flex', alignItems: 'center', gap: 18 }}>
+    <div className="lib-barra" style={stripStyle}>
+      <div className="lib-barra-dentro" style={{ position: 'absolute', inset: 0, padding: '0 28px', display: 'flex', alignItems: 'center', gap: 18 }}>
         {/* Label */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           <IconRune/>

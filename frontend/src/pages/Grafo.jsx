@@ -34,7 +34,7 @@ export default function Grafo() {
   const selectedNode = selected ? nodes.find(n => n.id === selected) : null;
 
   return (
-    <div style={{ padding: '24px 36px', display: 'grid', gridTemplateColumns: '1fr 300px', gap: 24, height: '100%' }}>
+    <div className="grafo-pagina" style={{ padding: '24px 36px', display: 'grid', gridTemplateColumns: '1fr 300px', gap: 24, height: '100%' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div>
           <div className="m-eyebrow">Capitulum VII · Costellazione</div>

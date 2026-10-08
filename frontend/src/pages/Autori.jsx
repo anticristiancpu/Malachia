@@ -4,6 +4,7 @@ import BookCover from '../components/BookCover.jsx';
 import { ORN } from '../components/ORN.jsx';
 import { authors as authorsApi } from '../api/index.js';
 import { useToast } from '../components/Toast.jsx';
+import useIsMobile from '../hooks/useIsMobile.js';
 
 /* ── Costanti ──────────────────────────────────────────────────────── */
 const ALL_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#'.split('');
@@ -219,6 +220,13 @@ export default function Autori() {
   const [search,        setSearch]        = useState('');
   const [sortMode,      setSortMode]      = useState('az');
   const [selected,      setSelected]      = useState(null);
+  // Sul telefono i due pannelli non stanno affiancati: toccare un autore apre
+  // la sua pagina, che esiste già. Sul desktop resta il pannello a destra.
+  const mobile = useIsMobile();
+  const sceglieAutore = (a) => {
+    if (mobile) { navigate(`/autori/${a.id}`); return; }
+    setSelected(a.id === selected ? null : a.id);
+  };
   const [authorDetail,  setAuthorDetail]  = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
@@ -396,7 +404,7 @@ export default function Autori() {
               key={a.id}
               author={a}
               selected={selected === a.id}
-              onClick={() => setSelected(a.id === selected ? null : a.id)}
+              onClick={() => sceglieAutore(a)}
             />
           ))}
         </div>
@@ -409,7 +417,7 @@ export default function Autori() {
         key={a.id}
         author={a}
         selected={selected === a.id}
-        onClick={() => setSelected(a.id === selected ? null : a.id)}
+        onClick={() => sceglieAutore(a)}
       />
     ));
   }
@@ -574,10 +582,10 @@ export default function Autori() {
 
   /* ── Render principale ── */
   return (
-    <div style={{ padding: '28px 36px 0', display: 'flex', flexDirection: 'column', gap: 18, height: '100%', overflow: 'hidden' }}>
+    <div className="pannelli-pagina" style={{ padding: '28px 36px 0', display: 'flex', flexDirection: 'column', gap: 18, height: '100%', overflow: 'hidden' }}>
 
       {/* ── Header ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexShrink: 0 }}>
+      <div className="pannelli-testa" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexShrink: 0 }}>
         <div>
           <div className="m-eyebrow" style={{ marginBottom: 4 }}>Capitulum V</div>
           <div style={{
@@ -594,7 +602,7 @@ export default function Autori() {
             }}>· {total}</em>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="pannelli-strumenti" style={{ display: 'flex', gap: 8 }}>
           <div className="m-searchbar" style={{ width: 240 }}>
             <ORN.quill size={14} style={{ color: 'var(--m-ink-muted)' }}/>
             <input
@@ -630,7 +638,7 @@ export default function Autori() {
       <div style={{ borderTop: '1px solid var(--cine-gold-dim)', flex: 1, display: 'flex', minHeight: 0 }}>
 
         {/* ── Lista autori (sinistra) ── */}
-        <div style={{
+        <div className="pannelli-elenco" style={{
           width: 320, borderRight: '1px solid var(--m-rule)',
           display: 'flex', flexShrink: 0,
         }}>
@@ -649,7 +657,7 @@ export default function Autori() {
         </div>
 
         {/* ── Pannello dettaglio (destra) ── */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px' }}>
+        <div className="pannelli-dettaglio" style={{ flex: 1, overflowY: 'auto', padding: '24px 32px' }}>
           {renderDetail()}
         </div>
       </div>
