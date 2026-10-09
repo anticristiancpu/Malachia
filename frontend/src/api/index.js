@@ -58,9 +58,9 @@ export const shelves = {
     api.post(`/shelves/${id}/books`, { book_id, ...opzioni }).then(r => r.data),
   removeBook:(id, bookId)  => api.delete(`/shelves/${id}/books/${bookId}`).then(r => r.data),
   // riordino dentro lo scaffale: after_book_id null = in testa
-  moveBook:  (id, bookId, { after_book_id = null, section_id } = {}) =>
-    api.patch(`/shelves/${id}/books/${bookId}`,
-      section_id !== undefined ? { after_book_id, section_id } : { after_book_id }).then(r => r.data),
+  // sposta un libro nella fila: { after: { tipo, id } | null } oppure { section_id }
+  moveBook:  (id, bookId, corpo = {}) =>
+    api.patch(`/shelves/${id}/books/${bookId}`, corpo).then(r => r.data),
   // sposta ('move') o copia ('copy') su un altro scaffale
   transfer:  (id, bookId, target_shelf_id, mode = 'move', section_id = null) =>
     api.post(`/shelves/${id}/books/${bookId}/transfer`,

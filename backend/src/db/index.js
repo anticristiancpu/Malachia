@@ -8,7 +8,7 @@ const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../../data/malac
 // Versione dello schema. Va alzata di uno ogni volta che si aggiunge una
 // migrazione: è questo numero a dire se c'è davvero qualcosa da applicare,
 // e quindi se serve un backup prima di toccare il database.
-const VERSIONE_SCHEMA = 7;
+const VERSIONE_SCHEMA = 8;
 
 // Quante copie di sicurezza tenere accanto al database.
 const BACKUP_DA_TENERE = 5;
@@ -107,7 +107,57 @@ function initSchema() {
   }
 
   runMigrations();
+  if (versione < 8) convertiInFila();
   db.pragma(`user_version = ${VERSIONE_SCHEMA}`);
+}
+
+/* Schema 8: le sezioni diventano etichette nella fila dei libri.
+   Prima ogni sezione aveva le sue posizioni e i libri le sue; ora libri ed
+   etichette stanno nello stesso spazio, e un libro appartiene all'ultima
+   etichetta che lo precede. Qui si riscrive ogni scaffale conservando
+   l'ordine in cui lo si vedeva.
+
+   I "nuovi arrivi" diventano la testa della fila. Se però erano stati
+   spostati apposta in mezzo alle sezioni, quella scelta si rispetta: al loro
+   posto nasce un'etichetta vera con lo stesso nome, e la testa resta vuota. */
+function convertiInFila() {
+  const crypto = require('crypto');
+  const scaffali = db.prepare('SELECT id, base_position, base_label FROM shelves').all();
+  const updL = db.prepare('UPDATE shelf_books SET position = ?, section_id = ? WHERE shelf_id = ? AND book_id = ?');
+  const updE = db.prepare('UPDATE shelf_sections SET position = ? WHERE id = ?');
+  const insE = db.prepare('INSERT INTO shelf_sections (id, shelf_id, name, position) VALUES (?,?,?,?)');
+  const libriDi = db.prepare(`SELECT book_id FROM shelf_books WHERE shelf_id = ? AND section_id IS ?
+                               ORDER BY position IS NULL, position`);
+
+  db.transaction(() => {
+    for (const sc of scaffali) {
+      const sezioni = db.prepare(`SELECT id, position FROM shelf_sections WHERE shelf_id = ?
+                                  ORDER BY position IS NULL, position, created_at`).all(sc.id);
+      // mai spostati: i nuovi arrivi vanno in testa, come nel modello nuovo
+      const base = { id: null, position: sc.base_position ?? -Infinity };
+      const etichette = [...sezioni, base].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+      const libriBase = libriDi.all(sc.id, null);
+      let k = 0;
+      const prossima = () => (++k) * 10;
+
+      etichette.forEach((e, i) => {
+        if (e.id === null) {
+          if (!libriBase.length) return;
+          if (i === 0) {                       // in testa: restano senza etichetta
+            libriBase.forEach(b => updL.run(prossima(), null, sc.id, b.book_id));
+            return;
+          }
+          const nuova = crypto.randomUUID();   // in mezzo: un'etichetta vera al loro posto
+          insE.run(nuova, sc.id, sc.base_label || 'Nuovi arrivi', prossima());
+          libriBase.forEach(b => updL.run(prossima(), nuova, sc.id, b.book_id));
+          db.prepare('UPDATE shelves SET base_hidden = 1 WHERE id = ?').run(sc.id);
+          return;
+        }
+        updE.run(prossima(), e.id);
+        libriDi.all(sc.id, e.id).forEach(b => updL.run(prossima(), e.id, sc.id, b.book_id));
+      });
+    }
+  })();
 }
 
 function runMigrations() {

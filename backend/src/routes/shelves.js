@@ -14,8 +14,10 @@ const SHELF_COVERS_DIR = path.join(__dirname, '../../../uploads/shelf-covers');
    un ordine. L'ordine sta in shelf_books.position, con valori distanziati di
    10, così per inserire un titolo in mezzo basta prendere il punto medio fra
    i due vicini, senza rinumerare l'intero scaffale.
-   Le sezioni (shelf_sections) raggruppano i libri dentro uno scaffale; la
-   sezione predefinita è semplicemente section_id vuoto.
+   Le sezioni (shelf_sections) sono etichette messe nella fila insieme ai
+   libri, nello stesso spazio di posizioni: un libro appartiene all'ultima
+   etichetta che lo precede. Quelli prima della prima etichetta sono i
+   "nuovi arrivi" (section_id vuoto). Vedi "La fila" più sotto.
    ══════════════════════════════════════════════════════════════════════════ */
 
 const PASSO = 10;          // distanza fra due posizioni consecutive
@@ -71,17 +73,90 @@ function conEbook(db, righe) {
 }
 
 /* Rinumera una sezione a 10, 20, 30… quando lo spazio fra due vicini si esaurisce. */
-function rinumera(db, shelfId, sectionId) {
-  const righe = db.prepare(`
-    SELECT book_id FROM shelf_books
-    WHERE shelf_id = ? AND section_id IS ?
-    ORDER BY position IS NULL, position
-  `).all(shelfId, sectionId ?? null);
-  const upd = db.prepare('UPDATE shelf_books SET position = ? WHERE shelf_id = ? AND book_id = ?');
-  righe.forEach((r, i) => upd.run((i + 1) * PASSO, shelfId, r.book_id));
+/* ══ La fila ═══════════════════════════════════════════════════════════════
+   Uno scaffale è una fila sola: libri ed etichette, ciascuno con la sua
+   posizione nello stesso spazio. Spostare un'etichetta è come spostare un
+   libro: cambia posizione, e i libri che la seguono, fino alla successiva,
+   diventano suoi. section_id resta scritto sui libri ma è sempre ricavato
+   dalla fila con normalizza(): chi lo legge (menu, conteggi) non deve sapere
+   com'è fatta.                                                              */
+
+const stesso = (a, b) => a && b && a.tipo === b.tipo && a.id === b.id;
+
+function fila(db, shelfId, escludi = null) {
+  const etichette = db.prepare('SELECT id, position FROM shelf_sections WHERE shelf_id = ?').all(shelfId)
+    .map(e => ({ tipo: 'etichetta', id: e.id, position: e.position ?? 0 }));
+  const libri = db.prepare('SELECT book_id AS id, position FROM shelf_books WHERE shelf_id = ?').all(shelfId)
+    .map(b => ({ tipo: 'libro', id: b.id, position: b.position ?? 0 }));
+  return [...etichette, ...libri]
+    .filter(x => !stesso(x, escludi))
+    // a parità di posizione l'etichetta viene prima del libro
+    .sort((a, b) => (a.position - b.position) || (a.tipo === b.tipo ? 0 : a.tipo === 'etichetta' ? -1 : 1));
 }
 
-/* Posizione in coda a una sezione. */
+/* Rinumera l'intera fila a 10, 20, 30… quando lo spazio decimale finisce. */
+function rinumera(db, shelfId) {
+  const updL = db.prepare('UPDATE shelf_books SET position = ? WHERE shelf_id = ? AND book_id = ?');
+  const updE = db.prepare('UPDATE shelf_sections SET position = ? WHERE id = ?');
+  fila(db, shelfId).forEach((x, i) => {
+    if (x.tipo === 'libro') updL.run((i + 1) * PASSO, shelfId, x.id);
+    else updE.run((i + 1) * PASSO, x.id);
+  });
+}
+
+/* Posizione subito dopo `dopo` ({ tipo, id }); null = in testa alla fila.
+   `escludi` è l'elemento che si sta spostando: non conta come vicino. */
+function posizioneDopo(db, shelfId, dopo, escludi = null, giaRinumerato = false) {
+  const f = fila(db, shelfId, escludi);
+  if (!f.length) return PASSO;
+  let i = -1;
+  if (dopo) {
+    i = f.findIndex(x => stesso(x, dopo));
+    if (i < 0) i = f.length - 1;                   // riferimento sparito: in coda
+  }
+  if (i === -1) return f[0].position - PASSO;      // in testa
+  const prima = f[i].position;
+  const succ = f[i + 1]?.position;
+  if (succ === undefined) return prima + PASSO;    // in coda
+  if (succ - prima > MIN_DIVARIO) return (prima + succ) / 2;
+  if (giaRinumerato) return prima + MIN_DIVARIO / 2;
+  rinumera(db, shelfId);                           // una sola volta: ora c'è spazio
+  return posizioneDopo(db, shelfId, dopo, escludi, true);
+}
+
+/* L'ultimo elemento del gruppo di un'etichetta (sectionId null = i nuovi
+   arrivi in testa): un libro messo "in fondo" a quel gruppo va dopo di lui.
+   null se il gruppo è vuoto e sta in testa. */
+function codaDelGruppo(db, shelfId, sectionId, escludi = null) {
+  const f = fila(db, shelfId, escludi);
+  let i = -1;
+  if (sectionId) {
+    i = f.findIndex(x => x.tipo === 'etichetta' && x.id === sectionId);
+    if (i < 0) return f.length ? f[f.length - 1] : null;   // etichetta sparita: in coda
+  }
+  while (f[i + 1] && f[i + 1].tipo !== 'etichetta') i++;
+  return i >= 0 ? f[i] : null;
+}
+
+function posizioneInCoda(db, shelfId, sectionId, escludi = null) {
+  return posizioneDopo(db, shelfId, codaDelGruppo(db, shelfId, sectionId, escludi), escludi);
+}
+
+/* Riscrive section_id di ogni libro leggendo la fila. Se i nuovi arrivi
+   erano stati tolti ma qualche libro è finito in testa, tornano visibili:
+   un libro non deve mai stare in un posto che non si vede. */
+function normalizza(db, shelfId) {
+  let corrente = null, inTesta = 0;
+  const upd = db.prepare('UPDATE shelf_books SET section_id = ? WHERE shelf_id = ? AND book_id = ?');
+  db.transaction(() => {
+    for (const x of fila(db, shelfId)) {
+      if (x.tipo === 'etichetta') corrente = x.id;
+      else { upd.run(corrente, shelfId, x.id); if (!corrente) inTesta++; }
+    }
+    if (inTesta) db.prepare('UPDATE shelves SET base_hidden = 0 WHERE id = ? AND base_hidden = 1').run(shelfId);
+  })();
+}
+
 /* Dove va un libro arrivato senza sezione. Di solito sui nuovi arrivi; ma se
    quel ripiano è stato tolto va sulla prima sezione, altrimenti finirebbe in
    un posto che non si vede. Se lo scaffale non ha più sezioni, i nuovi arrivi
@@ -95,37 +170,6 @@ function sezioneDiArrivo(db, shelfId, sectionId) {
   if (prima) return prima.id;
   db.prepare('UPDATE shelves SET base_hidden = 0 WHERE id = ?').run(shelfId);
   return null;
-}
-
-function posizioneInCoda(db, shelfId, sectionId) {
-  const r = db.prepare(`
-    SELECT MAX(position) AS m FROM shelf_books WHERE shelf_id = ? AND section_id IS ?
-  `).get(shelfId, sectionId ?? null);
-  return (r?.m ?? 0) + PASSO;
-}
-
-/**
- * Posizione per inserire subito dopo un certo libro (o in testa se dopoId è null).
- * Prende il punto medio fra il vicino precedente e quello successivo; se non
- * c'è più spazio decimale, rinumera la sezione e riprova una volta sola.
- */
-function posizioneDopo(db, shelfId, sectionId, dopoId) {
-  const sid = sectionId ?? null;
-  const elenco = db.prepare(`
-    SELECT book_id, position FROM shelf_books
-    WHERE shelf_id = ? AND section_id IS ?
-    ORDER BY position IS NULL, position
-  `).all(shelfId, sid);
-
-  const i = dopoId ? elenco.findIndex(r => r.book_id === dopoId) : -1;
-  const prima = i >= 0 ? (elenco[i].position ?? 0) : 0;
-  const dopo  = elenco[i + 1]?.position;
-
-  if (dopo == null) return prima + PASSO;          // in coda
-  if (dopo - prima > MIN_DIVARIO) return (prima + dopo) / 2;
-
-  rinumera(db, shelfId, sid);
-  return posizioneDopo(db, shelfId, sid, dopoId);  // una sola ricorsione: ora c'è spazio
 }
 
 /* ── GET /api/shelves — indice, con conteggi per tipo ────────────────────── */
@@ -317,7 +361,7 @@ router.delete('/:id', (req, res) => {
    Senza after_book_id il record va in coda alla sezione.                   */
 router.post('/:id/books', (req, res) => {
   const db = getDb();
-  const { book_id, after_book_id = null } = req.body;
+  const { book_id, after_book_id = null, after } = req.body;
   if (!book_id) return res.status(400).json({ error: 'book_id richiesto' });
   const section_id = sezioneDiArrivo(db, req.params.id, req.body.section_id || null);
 
@@ -327,33 +371,47 @@ router.post('/:id/books', (req, res) => {
     .get(req.params.id, book_id);
   if (giaPresente) return res.status(409).json({ error: 'Il record è già su questo scaffale' });
 
-  const position = after_book_id
-    ? posizioneDopo(db, req.params.id, section_id, after_book_id)
+  // dopo un elemento preciso della fila, o dopo un libro, o in fondo al gruppo
+  const position = after !== undefined ? posizioneDopo(db, req.params.id, after)
+    : after_book_id ? posizioneDopo(db, req.params.id, { tipo: 'libro', id: after_book_id })
     : posizioneInCoda(db, req.params.id, section_id);
 
   db.prepare('INSERT INTO shelf_books (shelf_id, book_id, position, section_id) VALUES (?,?,?,?)')
     .run(req.params.id, book_id, position, section_id);
-  res.status(201).json({ ok: true, position, section_id });
+  normalizza(db, req.params.id);
+  const finale = db.prepare('SELECT section_id FROM shelf_books WHERE shelf_id = ? AND book_id = ?')
+    .get(req.params.id, book_id);
+  res.status(201).json({ ok: true, position, section_id: finale?.section_id ?? null });
 });
 
-/* ── PATCH /api/shelves/:id/books/:bookId — riordina o cambia sezione ─────
-   Corpo: { after_book_id?, section_id? }  (after_book_id null = in testa)  */
+/* ── PATCH /api/shelves/:id/books/:bookId — sposta un libro nella fila ────
+   { after: { tipo, id } | null }  subito dopo quell'elemento (null = in testa)
+   { section_id }                  in fondo al gruppo di quell'etichetta      */
 router.patch('/:id/books/:bookId', (req, res) => {
   const db = getDb();
   const riga = db.prepare('SELECT * FROM shelf_books WHERE shelf_id = ? AND book_id = ?')
     .get(req.params.id, req.params.bookId);
   if (!riga) return res.status(404).json({ error: 'Il record non è su questo scaffale' });
 
-  const sezione = req.body.section_id !== undefined ? req.body.section_id : riga.section_id;
-  const dopo = req.body.after_book_id ?? null;
-  // Il libro non deve contare come vicino di se stesso mentre si ricalcola
-  db.prepare('UPDATE shelf_books SET position = NULL WHERE shelf_id = ? AND book_id = ?')
-    .run(req.params.id, req.params.bookId);
-  const position = posizioneDopo(db, req.params.id, sezione, dopo);
+  const io = { tipo: 'libro', id: req.params.bookId };
+  let position;
+  if (req.body.after !== undefined) {
+    position = posizioneDopo(db, req.params.id, req.body.after, io);
+  } else if (req.body.after_book_id) {
+    position = posizioneDopo(db, req.params.id, { tipo: 'libro', id: req.body.after_book_id }, io);
+  } else if (req.body.section_id !== undefined) {
+    position = posizioneInCoda(db, req.params.id,
+      sezioneDiArrivo(db, req.params.id, req.body.section_id || null), io);
+  } else {
+    return res.json({ ok: true, position: riga.position, section_id: riga.section_id });
+  }
 
-  db.prepare('UPDATE shelf_books SET position = ?, section_id = ? WHERE shelf_id = ? AND book_id = ?')
-    .run(position, sezione, req.params.id, req.params.bookId);
-  res.json({ ok: true, position, section_id: sezione });
+  db.prepare('UPDATE shelf_books SET position = ? WHERE shelf_id = ? AND book_id = ?')
+    .run(position, req.params.id, req.params.bookId);
+  normalizza(db, req.params.id);
+  const finale = db.prepare('SELECT section_id FROM shelf_books WHERE shelf_id = ? AND book_id = ?')
+    .get(req.params.id, req.params.bookId);
+  res.json({ ok: true, position, section_id: finale?.section_id ?? null });
 });
 
 /* ── POST /api/shelves/:id/books/:bookId/transfer — sposta o copia ────────
@@ -377,6 +435,7 @@ router.post('/:id/books/:bookId/transfer', (req, res) => {
       db.prepare('INSERT INTO shelf_books (shelf_id, book_id, position, section_id) VALUES (?,?,?,?)')
         .run(target_shelf_id, req.params.bookId,
              posizioneInCoda(db, target_shelf_id, section_id), section_id);
+      normalizza(db, target_shelf_id);
     }
     if (mode === 'move') {
       db.prepare('DELETE FROM shelf_books WHERE shelf_id = ? AND book_id = ?')
@@ -442,160 +501,94 @@ router.patch('/:id/posizione', (req, res) => {
 
 /* ── Sezioni dentro uno scaffale ─────────────────────────────────────────── */
 
+/* POST /api/shelves/:id/sections { name, after? } — un'etichetta nuova.
+   Senza `after` va in fondo alla fila: non ruba libri a nessuno. */
 router.post('/:id/sections', (req, res) => {
   const db = getDb();
   const { name } = req.body;
   const id = uuidv4();
-  const ultima = db.prepare('SELECT MAX(position) AS m FROM shelf_sections WHERE shelf_id = ?')
-    .get(req.params.id);
+  const f = fila(db, req.params.id);
+  const position = req.body.after !== undefined
+    ? posizioneDopo(db, req.params.id, req.body.after)
+    : (f.length ? f[f.length - 1].position + PASSO : PASSO);
   db.prepare('INSERT INTO shelf_sections (id, shelf_id, name, position) VALUES (?,?,?,?)')
-    .run(id, req.params.id, name || null, (ultima?.m ?? 0) + PASSO);
+    .run(id, req.params.id, name || null, position);
+  normalizza(db, req.params.id);
   res.status(201).json(db.prepare('SELECT id, name, position FROM shelf_sections WHERE id = ?').get(id));
 });
 
+/* PATCH /api/shelves/:id/sections/:sid { name?, after? }
+   `after` sposta l'etichetta nella fila come si sposta un libro. */
 router.patch('/:id/sections/:sectionId', (req, res) => {
   const db = getDb();
   const sez = db.prepare('SELECT * FROM shelf_sections WHERE id = ? AND shelf_id = ?')
     .get(req.params.sectionId, req.params.id);
   if (!sez) return res.status(404).json({ error: 'Sezione non trovata' });
-  const { name, position, after_section_id } = req.body;
-  const nuovaPosizione = after_section_id !== undefined
-    ? posizioneEtichetta(db, req.params.id,
-        after_section_id === SEZIONE_BASE ? SEZIONE_BASE : (after_section_id || null),
-        req.params.sectionId)
-    : (position !== undefined ? position : sez.position);
+
+  const position = req.body.after !== undefined
+    ? posizioneDopo(db, req.params.id, req.body.after, { tipo: 'etichetta', id: sez.id })
+    : sez.position;
   db.prepare('UPDATE shelf_sections SET name = ?, position = ? WHERE id = ?').run(
-    name !== undefined ? (name || null) : sez.name,
-    nuovaPosizione,
-    req.params.sectionId
-  );
-  res.json(db.prepare('SELECT id, name, position FROM shelf_sections WHERE id = ?').get(req.params.sectionId));
+    req.body.name !== undefined ? (req.body.name || null) : sez.name,
+    position, sez.id);
+  normalizza(db, req.params.id);
+  res.json(db.prepare('SELECT id, name, position FROM shelf_sections WHERE id = ?').get(sez.id));
 });
 
-/* ── Ordine delle etichette ───────────────────────────────────────────────
-   Le sezioni e l'etichetta dei record senza sezione stanno nella stessa fila e
-   si trascinano allo stesso modo. Quella base non è una riga di tabella: la sua
-   posizione vive sullo scaffale, in base_position.                           */
+/* DELETE /api/shelves/:id/sections/:sid — si toglie l'etichetta; i suoi libri
+   restano dove sono e passano al gruppo che li precede. */
+router.delete('/:id/sections/:sectionId', (req, res) => {
+  const db = getDb();
+  db.prepare('DELETE FROM shelf_sections WHERE id = ? AND shelf_id = ?')
+    .run(req.params.sectionId, req.params.id);
+  normalizza(db, req.params.id);
+  res.json({ ok: true });
+});
 
-// Posizioni attuali di tutte le etichette, base compresa, in ordine.
-function etichetteInOrdine(db, shelfId) {
-  const scaffale = db.prepare('SELECT base_position FROM shelves WHERE id = ?').get(shelfId);
-  const sezioni = db.prepare(
-    'SELECT id, position FROM shelf_sections WHERE shelf_id = ? ORDER BY position IS NULL, position'
-  ).all(shelfId);
-  const massima = sezioni.reduce((m, s) => Math.max(m, s.position ?? 0), 0);
-  const base = {
-    id: SEZIONE_BASE,
-    // senza una posizione sua, l'etichetta base sta in fondo
-    position: scaffale?.base_position ?? massima + PASSO,
-  };
-  return [...sezioni, base].sort((a, b) => a.position - b.position);
-}
-
-// Dove finisce un'etichetta spostata dopo `dopoId` (null = in testa).
-function posizioneEtichetta(db, shelfId, dopoId, idDaEscludere) {
-  const ordine = etichetteInOrdine(db, shelfId).filter(e => e.id !== idDaEscludere);
-  if (!dopoId) return (ordine.length ? ordine[0].position : PASSO) - PASSO / 2;
-  const i = ordine.findIndex(e => e.id === dopoId);
-  if (i < 0) return (ordine.length ? ordine[ordine.length - 1].position : 0) + PASSO;
-  const prima = ordine[i].position;
-  const dopo = ordine[i + 1]?.position;
-  if (dopo === undefined) return prima + PASSO;
-  const divario = dopo - prima;
-  if (divario > MIN_DIVARIO) return prima + divario / 2;
-  // spazio decimale esaurito: si rinumera e si riprova una volta sola
-  const upd = db.prepare('UPDATE shelf_sections SET position = ? WHERE id = ?');
-  const updBase = db.prepare('UPDATE shelves SET base_position = ? WHERE id = ?');
-  db.transaction(() => {
-    etichetteInOrdine(db, shelfId).forEach((e, k) => {
-      if (e.id === SEZIONE_BASE) updBase.run((k + 1) * PASSO, shelfId);
-      else upd.run((k + 1) * PASSO, e.id);
-    });
-  })();
-  return posizioneEtichetta(db, shelfId, dopoId, idDaEscludere);
-}
-
-/* PATCH /api/shelves/:id/base — rinomina o sposta l'etichetta dei record
-   senza sezione. Non si può eliminare: è il posto dove vivono i record che
-   non stanno in nessuna sezione. */
+/* PATCH /api/shelves/:id/base { label?, hidden: false } — rinomina i nuovi
+   arrivi o li rimette. Non si spostano: sono la testa della fila. */
 router.patch('/:id/base', (req, res) => {
   const db = getDb();
   const scaffale = db.prepare('SELECT * FROM shelves WHERE id = ?').get(req.params.id);
   if (!scaffale) return res.status(404).json({ error: 'Scaffale non trovato' });
-  const { label, after_section_id, hidden } = req.body;
-
-  if (hidden === false) {
+  if (req.body.hidden === false) {
     db.prepare('UPDATE shelves SET base_hidden = 0 WHERE id = ?').run(req.params.id);
   }
-  if (label !== undefined) {
+  if (req.body.label !== undefined) {
     db.prepare('UPDATE shelves SET base_label = ? WHERE id = ?')
-      .run(String(label).trim() || null, req.params.id);
+      .run(String(req.body.label).trim() || null, req.params.id);
   }
-  if (after_section_id !== undefined) {
-    const dopo = after_section_id === SEZIONE_BASE ? null : after_section_id;
-    const pos = posizioneEtichetta(db, req.params.id, dopo, SEZIONE_BASE);
-    db.prepare('UPDATE shelves SET base_position = ? WHERE id = ?').run(pos, req.params.id);
-  }
-  const agg = db.prepare('SELECT base_label, base_position FROM shelves WHERE id = ?').get(req.params.id);
-  res.json({ base_label: agg.base_label || 'Nuovi arrivi', base_position: agg.base_position });
+  const agg = db.prepare('SELECT base_label, base_hidden FROM shelves WHERE id = ?').get(req.params.id);
+  res.json({ base_label: agg.base_label || 'Nuovi arrivi', base_hidden: agg.base_hidden ? 1 : 0 });
 });
 
-/* Eliminando una sezione i suoi libri tornano nella sezione predefinita:
-   restano sullo scaffale, non si perde nulla. */
-router.delete('/:id/sections/:sectionId', (req, res) => {
-  const db = getDb();
-  let destinazione = null;
-  const esegui = db.transaction(() => {
-    db.prepare('DELETE FROM shelf_sections WHERE id = ? AND shelf_id = ?')
-      .run(req.params.sectionId, req.params.id);
-    // Di solito i volumi vanno sui nuovi arrivi; se quel ripiano è tolto,
-    // sulla prima sezione rimasta, o i nuovi arrivi tornano.
-    destinazione = sezioneDiArrivo(db, req.params.id, null);
-    db.prepare('UPDATE shelf_books SET section_id = ? WHERE shelf_id = ? AND section_id = ?')
-      .run(destinazione, req.params.id, req.params.sectionId);
-  });
-  esegui();
-  rinumera(db, req.params.id, destinazione);
-  res.json({ ok: true, volumi_spostati_in: destinazione });
-});
-
-/* ── DELETE /api/shelves/:id/base — toglie il ripiano dei nuovi arrivi ─────
-   { section_id? } dove spostare i volumi che c'erano; senza, la prima sezione.
-   Se ci sono volumi e nessuna sezione dove metterli, non si può: un libro non
-   deve finire in un ripiano che non si vede.                                */
+/* DELETE /api/shelves/:id/base — toglie i nuovi arrivi. Se in testa ci sono
+   libri, la prima etichetta si sposta davanti a loro e li prende con sé.
+   Senza etichette non si può: quei libri non avrebbero un nome visibile.   */
 router.delete('/:id/base', (req, res) => {
   const db = getDb();
   const scaffale = db.prepare('SELECT id FROM shelves WHERE id = ?').get(req.params.id);
   if (!scaffale) return res.status(404).json({ error: 'Scaffale non trovato' });
 
-  const volumi = db.prepare(
-    'SELECT book_id FROM shelf_books WHERE shelf_id = ? AND section_id IS NULL ORDER BY position IS NULL, position'
-  ).all(req.params.id);
-  const sezioni = db.prepare(
-    'SELECT id FROM shelf_sections WHERE shelf_id = ? ORDER BY position IS NULL, position, created_at'
-  ).all(req.params.id);
+  const f = fila(db, req.params.id);
+  const inTesta = [];
+  for (const x of f) { if (x.tipo === 'etichetta') break; inTesta.push(x); }
+  const prima = f.find(x => x.tipo === 'etichetta');
 
-  let destinazione = null;
-  if (volumi.length) {
-    destinazione = req.body?.section_id && sezioni.some(x => x.id === req.body.section_id)
-      ? req.body.section_id
-      : sezioni[0]?.id;
-    if (!destinazione) {
-      return res.status(409).json({
-        error: 'Ci sono volumi sui nuovi arrivi e nessun\'altra sezione dove spostarli: crea prima una sezione.',
-      });
-    }
+  if (inTesta.length && !prima) {
+    return res.status(409).json({
+      error: "Ci sono volumi sui nuovi arrivi e nessun'etichetta che possa prenderli: crea prima una sezione.",
+    });
   }
-
   db.transaction(() => {
-    // in coda alla destinazione, nell'ordine che avevano
-    const upd = db.prepare('UPDATE shelf_books SET section_id = ?, position = ? WHERE shelf_id = ? AND book_id = ?');
-    for (const v of volumi) {
-      upd.run(destinazione, posizioneInCoda(db, req.params.id, destinazione), req.params.id, v.book_id);
+    if (inTesta.length) {
+      db.prepare('UPDATE shelf_sections SET position = ? WHERE id = ?')
+        .run(posizioneDopo(db, req.params.id, null, prima), prima.id);
+      normalizza(db, req.params.id);
     }
     db.prepare('UPDATE shelves SET base_hidden = 1 WHERE id = ?').run(req.params.id);
   })();
-  res.json({ ok: true, volumi_spostati: volumi.length, in_sezione: destinazione });
+  res.json({ ok: true, volumi_spostati: inTesta.length, in_sezione: prima?.id ?? null });
 });
 
 /* ── Immagine di sfondo dello scaffale (invariato) ───────────────────────── */

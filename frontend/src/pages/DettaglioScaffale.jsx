@@ -4,7 +4,7 @@ import BookCover from '../components/BookCover.jsx';
 import { tipoRecord } from '../components/EbookMark.jsx';
 import { shelves as shelvesApi, books as booksApi, libraries as librariesApi } from '../api/index.js';
 import { useToast } from '../components/Toast.jsx';
-import VistaMensola, { dovePosare } from '../components/VistaMensola.jsx';
+import VistaMensola from '../components/VistaMensola.jsx';
 
 /* ══════════════════════════════════════════════════════════════════════════
    Uno scaffale: i libri nell'ordine in cui dialogano fra loro.
@@ -254,16 +254,13 @@ export default function DettaglioScaffale() {
 
   const [scaffale, setScaffale]   = useState(null);
   const [tuttiScaffali, setTutti] = useState([]);
+  const [librerie, setLibrerie]   = useState([]);
   const [caricamento, setCaric]   = useState(true);
   const [menu, setMenu]           = useState(null);
-  const [punto, setPunto]         = useState(null);   // dove inserire: { sectionId, afterBookId }
-  const [trascinato, setTrasc]    = useState(null);
-  const [sopra, setSopra]         = useState(null);   // riga sorvolata durante il trascinamento
-  const [sezioneTrasc, setSezTrasc] = useState(null); // sezione trascinata nella vista a elenco
-  const [guidaSez, setGuidaSez]     = useState(null); // { id, lato } dove cadrà
+  const [punto, setPunto]         = useState(null);   // dove inserire: { dopo: { tipo, id } | null }
   const [rinomino, setRinomino]   = useState(false);
   const [nomeTmp, setNomeTmp]     = useState('');
-  const [vista, setVista]         = useState('elenco');     // 'elenco' | 'mensola'
+  const [vista, setVista]         = useState('mensola');    // 'elenco' | 'mensola'
   const [altezza, setAltezza]     = useState(130);          // altezza delle copertine
   const [etichettaBase, setEtichettaBase] = useState('Nuovi arrivi');
   const [mostraEbook, setMostraEbook]     = useState(true);
@@ -283,50 +280,50 @@ export default function DettaglioScaffale() {
 
   useEffect(() => { carica(); }, [carica]);
   useEffect(() => { shelvesApi.list().then(setTutti).catch(() => {}); }, []);
-  const [librerie, setLibrerie] = useState([]);
   useEffect(() => { librariesApi.list().then(setLibrerie).catch(() => {}); }, []);
 
-  /* Le sezioni, con in testa quella senza nome che accoglie i nuovi arrivi. */
-  const sezioni = useMemo(() => {
+  /* La fila: etichette e libri in un solo ordine. Un libro appartiene
+     all'ultima etichetta che lo precede; quelli in testa sono i nuovi arrivi. */
+  const fila = useMemo(() => {
     if (!scaffale) return [];
-    const volumiSullaBase = (scaffale.books || []).some(b => !b.section_id);
-    const base = (!scaffale.base_hidden || volumiSullaBase)
-      ? [{ id: SEZIONE_BASE, name: null, sectionId: null, position: scaffale.base_position }]
-      : [];
-    const vere = (scaffale.sections || []).map(s => ({ ...s, sectionId: s.id }));
-    const massima = vere.reduce((m, s) => Math.max(m, s.position ?? 0), 0);
-    return [
-      ...base.map(b => ({ ...b, position: b.position ?? massima + 10 })),
-      ...vere,
-    ].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    const etichette = (scaffale.sections || [])
+      .map(s => ({ tipo: 'etichetta', id: s.id, nome: s.name, position: s.position ?? 0 }));
+    const libri = (scaffale.books || [])
+      .map(b => ({ tipo: 'libro', id: b.id, libro: b, position: b.position ?? 0 }));
+    return [...etichette, ...libri].sort((a, b) =>
+      (a.position - b.position) || (a.tipo === b.tipo ? 0 : a.tipo === 'etichetta' ? -1 : 1));
   }, [scaffale]);
 
-  const perSezione = useMemo(() => {
-    const m = {};
-    for (const s of sezioni) m[s.id] = [];
-    for (const b of (scaffale?.books || [])) {
-      const chiave = b.section_id || SEZIONE_BASE;
-      (m[chiave] ||= []).push(b);
-    }
-    return m;
-  }, [scaffale, sezioni]);
+  // gli ebook nascosti spariscono dalla vista, non dalla fila
+  const filaVisibile = useMemo(() => (mostraEbook ? fila
+    : fila.filter(x => x.tipo === 'etichetta' || tipoRecord(x.libro) !== 'ebook')), [fila, mostraEbook]);
+  const nascosti = fila.length - filaVisibile.length;
+
+  // i nuovi arrivi si vedono se non sono stati tolti, o se in testa c'è qualche libro
+  const testa = {
+    visibile: !scaffale?.base_hidden || (fila.length > 0 && fila[0].tipo === 'libro'),
+    nome: etichettaBase,
+  };
+
+  /* Le etichette per il menu "sposta nella sezione". */
+  const sezioni = useMemo(() => [
+    ...(testa.visibile ? [{ id: SEZIONE_BASE, name: null }] : []),
+    ...fila.filter(x => x.tipo === 'etichetta').map(x => ({ id: x.id, name: x.nome })),
+  ], [fila, testa.visibile]);
 
   const presenti = useMemo(() => new Set((scaffale?.books || []).map(b => b.id)), [scaffale]);
   const altriScaffali = useMemo(() => tuttiScaffali.filter(s => s.id !== id), [tuttiScaffali, id]);
 
   /* ── Azioni ── */
+  const errore = (testo) => (e) => toast(e?.response?.data?.error || testo, 'error');
+
   async function inserisci(libro) {
     try {
-      await shelvesApi.addBook(id, libro.id, {
-        section_id: punto?.sectionId ?? null,
-        after_book_id: punto?.afterBookId ?? null,
-      });
+      await shelvesApi.addBook(id, libro.id, { after: punto?.dopo ?? null });
       setPunto(null);
       await carica();
       toast(`"${libro.title}" sullo scaffale`, 'success');
-    } catch (e) {
-      toast(e?.response?.data?.error || 'Non sono riuscito a inserirlo', 'error');
-    }
+    } catch (e) { errore('Non sono riuscito a inserirlo')(e); }
   }
 
   async function togli(libro) {
@@ -337,12 +334,10 @@ export default function DettaglioScaffale() {
     } catch { toast('Errore nel togliere il record', 'error'); }
   }
 
+  // in fondo al gruppo di un'etichetta
   async function spostaInSezione(libro, sezioneId) {
     try {
-      await shelvesApi.moveBook(id, libro.id, {
-        after_book_id: null,
-        section_id: sezioneId === SEZIONE_BASE ? null : sezioneId,
-      });
+      await shelvesApi.moveBook(id, libro.id, { section_id: sezioneId === SEZIONE_BASE ? null : sezioneId });
       await carica();
     } catch { toast('Errore nello spostamento', 'error'); }
   }
@@ -356,15 +351,73 @@ export default function DettaglioScaffale() {
     } catch { toast('Errore nel trasferimento', 'error'); }
   }
 
-  async function rilascia(sezioneId, dopoId) {
-    if (!trascinato) return;
-    const dest = sezioneId === SEZIONE_BASE ? null : sezioneId;
-    setTrasc(null); setSopra(null);
-    if (trascinato.id === dopoId) return;
+  /* Spostare un elemento della fila — libro o etichetta, è uguale — subito
+     dopo `dopo` (null = in testa). */
+  async function sposta(elemento, dopo) {
     try {
-      await shelvesApi.moveBook(id, trascinato.id, { after_book_id: dopoId, section_id: dest });
+      if (elemento.tipo === 'libro') await shelvesApi.moveBook(id, elemento.id, { after: dopo });
+      else await shelvesApi.updateSection(id, elemento.id, { after: dopo });
       await carica();
-    } catch { toast('Errore nel riordino', 'error'); }
+    } catch { toast('Errore nello spostamento', 'error'); await carica(); }
+  }
+
+  /* Più libri insieme, nell'ordine che avevano. */
+  async function spostaMolti(ids, dopo) {
+    let precedente = dopo;
+    try {
+      for (const bid of ids) {
+        await shelvesApi.moveBook(id, bid, { after: precedente });
+        precedente = { tipo: 'libro', id: bid };
+      }
+      await carica();
+      toast(ids.length + ' volumi spostati', 'success');
+    } catch { toast('Errore nello spostamento', 'error'); await carica(); }
+  }
+
+  /* Rinominare: null è la testa, i nuovi arrivi, il cui nome vive sullo scaffale. */
+  async function rinomina(etichettaId, nome) {
+    try {
+      if (!etichettaId) await shelvesApi.updateBase(id, { label: nome });
+      else await shelvesApi.updateSection(id, etichettaId, { name: nome });
+      await carica();
+    } catch { toast('Errore nella rinomina', 'error'); }
+  }
+
+  /* Eliminare un'etichetta: i suoi libri restano dove sono e passano al gruppo
+     che la precede. Per la testa vale la regola dei nuovi arrivi. */
+  async function elimina(etichettaId) {
+    if (!etichettaId) return eliminaBase();
+    try {
+      await shelvesApi.deleteSection(id, etichettaId);
+      await carica();
+      toast('Etichetta tolta — i suoi volumi passano al gruppo precedente', 'success');
+    } catch { toast('Errore nell’eliminazione', 'error'); }
+  }
+
+  /* Togliere i nuovi arrivi: la prima etichetta si mette davanti ai loro libri
+     e li prende con sé. Senza etichette non si può. */
+  async function eliminaBase() {
+    const inTesta = [];
+    for (const x of fila) { if (x.tipo === 'etichetta') break; inTesta.push(x); }
+    const prima = fila.find(x => x.tipo === 'etichetta');
+    if (inTesta.length && !prima) {
+      toast(`Su «${etichettaBase}» ci sono ${inTesta.length} volumi e nessun'etichetta che possa prenderli: crea prima una sezione`, 'error');
+      return;
+    }
+    const domanda = inTesta.length
+      ? `Togliere «${etichettaBase}»? I suoi ${inTesta.length} volumi passano a «${prima.nome || 'senza nome'}».`
+      : `Togliere «${etichettaBase}» da questo scaffale?`;
+    if (!window.confirm(domanda)) return;
+    try {
+      await shelvesApi.deleteBase(id);
+      await carica();
+      toast(`«${etichettaBase}» tolto`, 'success');
+    } catch (e) { errore('Non è stato possibile toglierlo')(e); }
+  }
+
+  async function rimettiBase() {
+    try { await shelvesApi.updateBase(id, { hidden: false }); await carica(); }
+    catch { toast('Errore', 'error'); }
   }
 
   /* La vista scelta e l'altezza restano con lo scaffale, non con il browser.
@@ -384,83 +437,10 @@ export default function DettaglioScaffale() {
   }, [id]);
   useEffect(() => () => clearTimeout(attesaAltezza.current), []);
 
-  /* Mostrare o nascondere gli ebook: resta con lo scaffale, non col browser. */
   const cambiaEbook = useCallback((mostra) => {
     setMostraEbook(mostra);
     shelvesApi.update(id, { show_ebooks: mostra }).catch(() => {});
   }, [id]);
-
-  /* Rinominare un cartellino. Quello dei record senza sezione non e' una
-     sezione vera: il suo nome vive sullo scaffale. */
-  async function rinominaEtichetta(sezioneId, nome) {
-    try {
-      if (sezioneId === SEZIONE_BASE) await shelvesApi.updateBase(id, { label: nome });
-      else await shelvesApi.updateSection(id, sezioneId, { name: nome });
-      await carica();
-    } catch { toast('Errore nella rinomina', 'error'); }
-  }
-
-  /* Eliminare una sezione: i suoi volumi tornano fra quelli senza sezione,
-     restano sullo scaffale. Il cartellino base non si puo' eliminare. */
-  async function eliminaEtichetta(sezioneId) {
-    if (sezioneId === SEZIONE_BASE) return eliminaBase();
-    try { await shelvesApi.deleteSection(id, sezioneId); await carica(); }
-    catch { toast('Errore nell\u2019eliminazione', 'error'); }
-  }
-
-  /* Togliere i nuovi arrivi. I volumi che ci sono passano nella prima
-     sezione, dopo averlo detto; senza altre sezioni non si può, perché
-     quei libri non avrebbero un posto visibile. */
-  async function eliminaBase() {
-    const quanti = (scaffale.books || []).filter(b => !b.section_id).length;
-    const prima = (scaffale.sections || [])[0];
-    if (quanti > 0 && !prima) {
-      toast(`Su «${etichettaBase}» ci sono ${quanti} volumi e nessun'altra sezione dove spostarli: crea prima una sezione`, 'error');
-      return;
-    }
-    const domanda = quanti > 0
-      ? `Togliere «${etichettaBase}»? I suoi ${quanti} volumi passano in «${prima.name || 'senza nome'}».`
-      : `Togliere «${etichettaBase}» da questo scaffale?`;
-    if (!window.confirm(domanda)) return;
-    try {
-      const r = await shelvesApi.deleteBase(id);
-      await carica();
-      toast(r.volumi_spostati
-        ? `«${etichettaBase}» tolto, ${r.volumi_spostati} volumi in «${prima.name || 'senza nome'}»`
-        : `«${etichettaBase}» tolto`, 'success');
-    } catch (e) { toast(e?.response?.data?.error || 'Non è stato possibile toglierlo', 'error'); }
-  }
-
-  async function rimettiBase() {
-    try { await shelvesApi.updateBase(id, { hidden: false }); await carica(); }
-    catch { toast('Errore', 'error'); }
-  }
-
-  /* Spostare un cartellino dopo un altro (null = in testa). */
-  async function spostaEtichetta(sezioneId, dopoId) {
-    if (sezioneId === dopoId) return;
-    try {
-      if (sezioneId === SEZIONE_BASE) await shelvesApi.updateBase(id, { after_section_id: dopoId });
-      else await shelvesApi.updateSection(id, sezioneId, { after_section_id: dopoId });
-      await carica();
-    } catch { toast('Errore nello spostamento', 'error'); }
-  }
-
-  /* Spostare piu' volumi insieme, mantenendo l'ordine che avevano. */
-  async function spostaMolti(sezioneId, dopoId, ids) {
-    const dest = sezioneId === SEZIONE_BASE ? null : sezioneId;
-    setTrasc(null); setSopra(null);
-    let precedente = dopoId;
-    try {
-      for (const bid of ids) {
-        if (bid === precedente) continue;
-        await shelvesApi.moveBook(id, bid, { after_book_id: precedente, section_id: dest });
-        precedente = bid;
-      }
-      await carica();
-      toast(ids.length + ' volumi spostati', 'success');
-    } catch { toast('Errore nello spostamento', 'error'); await carica(); }
-  }
 
   async function salvaNome() {
     const v = nomeTmp.trim();
@@ -476,9 +456,13 @@ export default function DettaglioScaffale() {
     catch { toast('Errore nel cambio di tipo', 'error'); }
   }
 
+  // un'etichetta nuova va in fondo alla fila: non prende libri a nessuno
   async function nuovaSezione() {
-    try { await shelvesApi.addSection(id, 'Nuova sezione'); await carica(); }
-    catch { toast('Errore nella creazione della sezione', 'error'); }
+    try {
+      await shelvesApi.addSection(id, 'Nuova etichetta');
+      await carica();
+      toast('Etichetta aggiunta in fondo: trascinala dove ti serve', 'success');
+    } catch { toast('Errore nella creazione dell’etichetta', 'error'); }
   }
 
   if (caricamento) return (
@@ -488,6 +472,13 @@ export default function DettaglioScaffale() {
 
   const libri = scaffale.books || [];
   const fisico = (scaffale.kind || 'tematico') === 'fisico';
+  const apriMenu = (e, libro) => {
+    e.preventDefault();
+    setMenu({ x: e.clientX, y: e.clientY, libro, sezione: libro.section_id || SEZIONE_BASE });
+  };
+  const aggiunta = punto
+    ? <AggiuntaRapida giaPresenti={presenti} onScegli={inserisci} onChiudi={() => setPunto(null)}/>
+    : null;
 
   return (
     <div style={{ padding: '26px 40px 70px' }}>
@@ -525,19 +516,16 @@ export default function DettaglioScaffale() {
             title="Uno scaffale fisico corrisponde a un gruppo reale sulla libreria">
             {fisico ? '▦ fisico' : '◇ tematico'}
           </button>
-          <button className="m-btn m-btn-ghost m-btn-sm" onClick={nuovaSezione}>+ sezione</button>
-          {scaffale.base_hidden ? (
+          <button className="m-btn m-btn-ghost m-btn-sm" onClick={nuovaSezione}>+ etichetta</button>
+          {!testa.visibile && (
             <button className="m-btn m-btn-ghost m-btn-sm" onClick={rimettiBase}
-              title="Rimette il ripiano dei volumi senza sezione">+ {etichettaBase.toLowerCase()}</button>
-          ) : null}
+              title="Rimette i nuovi arrivi in testa alla fila">+ {etichettaBase.toLowerCase()}</button>
+          )}
         </div>
       </div>
 
       {/* ── Come guardare lo scaffale ── */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-        margin: '18px 0 6px',
-      }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', margin: '18px 0 6px' }}>
         <div style={{ display: 'flex', border: '1px solid var(--cine-gold-dim)' }}>
           {[['elenco', 'Elenco'], ['mensola', 'Mensola']].map(([k, nome]) => (
             <button key={k} onClick={() => salvaVista(k)}
@@ -574,127 +562,36 @@ export default function DettaglioScaffale() {
 
       <div style={{ height: 1, background: 'var(--m-rule)', margin: '12px 0 24px' }}/>
 
-      {/* ── Mensola: le copertine in fila su un ripiano ── */}
       {vista === 'mensola' && (
         <>
           <VistaMensola
-            sezioni={sezioni} perSezione={perSezione} sezioneBase={SEZIONE_BASE}
-            altezza={altezza} etichettaBase={etichettaBase} mostraEbook={mostraEbook}
-            trascinato={trascinato} sopra={sopra}
-            onTrascinaInizio={setTrasc}
-            onTrascinaFine={() => { setTrasc(null); setSopra(null); }}
-            onSorvola={setSopra}
-            onEsci={chiave => setSopra(x => (x === chiave ? null : x))}
-            onRilascia={rilascia}
-            onRilasciaMolti={spostaMolti}
-            onRinominaSezione={rinominaEtichetta}
-            onEliminaSezione={eliminaEtichetta}
-            onSpostaEtichetta={spostaEtichetta}
+            elementi={filaVisibile} testa={testa} altezza={altezza} nascosti={nascosti}
+            onSposta={sposta} onSpostaMolti={spostaMolti}
             onApri={bid => navigate(`/libro/${bid}`)}
-            onMenu={(e, b, sezId) => {
-              e.preventDefault();
-              setMenu({ x: e.clientX, y: e.clientY, libro: b, sezione: sezId });
-            }}
-            onInserisci={(sezId, dopoId) => setPunto({ sectionId: sezId, afterBookId: dopoId })}
+            onMenu={apriMenu}
+            onInserisci={dopo => setPunto({ dopo })}
+            onRinomina={rinomina} onElimina={elimina}
           />
-          {punto && (
-            <AggiuntaRapida giaPresenti={presenti} onScegli={inserisci} onChiudi={() => setPunto(null)}/>
-          )}
+          {aggiunta}
           {libri.length === 0 && (
             <div className="m-marginalia" style={{ fontStyle: 'italic', fontSize: 12.5 }}>
-              Scaffale vuoto. Passa all’elenco per aggiungere i primi volumi.
+              Scaffale vuoto: usa il + per aggiungere i primi volumi.
             </div>
           )}
         </>
       )}
 
-      {/* ── Elenco ── */}
-      {vista === 'elenco' && sezioni.map(sez => {
-        const righe = perSezione[sez.id] || [];
-        const base = sez.id === SEZIONE_BASE;
-        return (
-          <section key={sez.id} style={{
-            marginBottom: 30, opacity: sezioneTrasc === sez.id ? 0.4 : 1,
-            borderTop: guidaSez?.id === sez.id && guidaSez.lato === 'prima' ? '3px solid var(--m-terracotta)' : '3px solid transparent',
-            borderBottom: guidaSez?.id === sez.id && guidaSez.lato === 'dopo' ? '3px solid var(--m-terracotta)' : '3px solid transparent',
-          }}
-            onDragEnter={e => { if (sezioneTrasc) e.preventDefault(); }}
-            onDragOver={e => {
-              if (!sezioneTrasc) return;
-              e.preventDefault();
-              const p = dovePosare(sezioni, sezioneTrasc, sez.id);
-              setGuidaSez(p ? { id: sez.id, lato: p.lato } : null);
-            }}
-            onDrop={e => {
-              if (!sezioneTrasc) return;
-              e.preventDefault();
-              const p = dovePosare(sezioni, sezioneTrasc, sez.id);
-              setSezTrasc(null); setGuidaSez(null);
-              if (p) spostaEtichetta(sezioneTrasc, p.dopo);
-            }}>
-            <IntestazioneSezione
-              trascina={{
-                onDragStart: e => {
-                  e.dataTransfer?.setData('text/plain', 'sezione:' + sez.id);
-                  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-                  setSezTrasc(sez.id);
-                },
-                onDragEnd: () => { setSezTrasc(null); setGuidaSez(null); },
-              }}
-              sezione={sez} base={base} conteggio={righe.length}
-              scaffaleId={id} onCambiato={carica} toast={toast}
-              etichettaBase={etichettaBase}
-              onRinominaBase={nome => rinominaEtichetta(SEZIONE_BASE, nome)}
-              onEliminaBase={eliminaBase}
-            />
-
-            {righe.length === 0 && (
-              <div className="m-marginalia" style={{ fontStyle: 'italic', padding: '10px 0 4px', fontSize: 12.5 }}>
-                {base ? 'Nessun record. Usa “aggiungi” qui sotto.' : 'Sezione vuota.'}
-              </div>
-            )}
-
-            {righe.map(b => (
-              <Riga
-                key={b.id} libro={b}
-                sorvolata={sopra === b.id}
-                inTrascinamento={trascinato?.id === b.id}
-                onDragStart={() => setTrasc(b)}
-                onDragEnd={() => { setTrasc(null); setSopra(null); }}
-                onDragOver={e => { e.preventDefault(); setSopra(b.id); }}
-                onDragLeave={() => setSopra(s => s === b.id ? null : s)}
-                onDrop={e => { e.preventDefault(); rilascia(sez.id, b.id); }}
-                onApri={() => navigate(`/libro/${b.id}`)}
-                onMenu={e => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, libro: b, sezione: sez.id }); }}
-                onInserisciQui={() => setPunto({ sectionId: base ? null : sez.id, afterBookId: b.id })}
-              />
-            ))}
-
-            {/* zona di rilascio in coda alla sezione */}
-            <div
-              onDragEnter={e => { e.preventDefault(); setSopra('coda-' + sez.id); }}
-              onDragOver={e => { e.preventDefault(); setSopra('coda-' + sez.id); }}
-              onDragLeave={() => setSopra(s => s === 'coda-' + sez.id ? null : s)}
-              onDrop={e => { e.preventDefault(); rilascia(sez.id, righe.length ? righe[righe.length - 1].id : null); }}
-              style={{
-                marginTop: 6, paddingTop: 6,
-                borderTop: sopra === 'coda-' + sez.id ? '2px solid var(--m-terracotta)' : '2px solid transparent',
-              }}>
-              <button className="m-btn m-btn-ghost m-btn-sm" style={{ fontSize: 11 }}
-                onClick={() => setPunto({
-                  sectionId: base ? null : sez.id,
-                  afterBookId: righe.length ? righe[righe.length - 1].id : null,
-                })}>
-                + aggiungi in questa sezione
-              </button>
-            </div>
-
-            {punto && (punto.sectionId === (base ? null : sez.id)) && (
-              <AggiuntaRapida giaPresenti={presenti} onScegli={inserisci} onChiudi={() => setPunto(null)}/>
-            )}
-          </section>
-        );
-      })}
+      {vista === 'elenco' && (
+        <VistaElenco
+          elementi={filaVisibile} testa={testa} nascosti={nascosti}
+          punto={punto} aggiunta={aggiunta}
+          onSposta={sposta}
+          onApri={bid => navigate(`/libro/${bid}`)}
+          onMenu={apriMenu}
+          onInserisci={dopo => setPunto({ dopo })}
+          onRinomina={rinomina} onElimina={elimina}
+        />
+      )}
 
       {menu && (
         <MenuRiga
@@ -714,39 +611,155 @@ export default function DettaglioScaffale() {
   );
 }
 
-/* ── Intestazione di una sezione (rinomina / elimina) ─────────────────────── */
-function IntestazioneSezione({ sezione, base, conteggio, scaffaleId, onCambiato, toast,
-                               etichettaBase, onRinominaBase, onEliminaBase, trascina }) {
+/* ── La vista a elenco: la stessa fila, una riga sotto l'altra ──────────────
+   Etichette e libri si trascinano allo stesso modo; si lascia sulla metà alta
+   di una riga per metterlo prima, sulla metà bassa per metterlo dopo.      */
+const chiaveDi = (x) => `${x.tipo}:${x.id}`;
+const rifDi = (x) => (x ? { tipo: x.tipo, id: x.id } : null);
+const stessoRif = (a, b) => (a === null && b === null) || (a && b && a.tipo === b.tipo && a.id === b.id);
+
+function VistaElenco({ elementi, testa, nascosti, punto, aggiunta,
+                      onSposta, onApri, onMenu, onInserisci, onRinomina, onElimina }) {
+  const [trascinato, setTrascinato] = useState(null);
+  const [guida, setGuida] = useState(null);   // { chiave, lato }
+
+  const conteggi = useMemo(() => {
+    const m = new Map([['testa', 0]]);
+    let corrente = 'testa';
+    for (const x of elementi) {
+      if (x.tipo === 'etichetta') { corrente = x.id; m.set(corrente, 0); }
+      else m.set(corrente, (m.get(corrente) || 0) + 1);
+    }
+    return m;
+  }, [elementi]);
+
+  const fine = () => { setTrascinato(null); setGuida(null); };
+  const latoDi = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return e.clientY < r.top + r.height / 2 ? 'prima' : 'dopo';
+  };
+
+  const rilascia = (i, lato) => {
+    const mosso = trascinato;
+    fine();
+    if (!mosso) return;
+    const dopo = lato === 'dopo' ? rifDi(elementi[i]) : (i > 0 ? rifDi(elementi[i - 1]) : null);
+    if (dopo && dopo.tipo === mosso.tipo && dopo.id === mosso.id) return;
+    onSposta(rifDi(mosso), dopo);
+  };
+
+  const sorgente = (x) => ({
+    draggable: true,
+    onDragStart: e => {
+      e.dataTransfer?.setData('text/plain', chiaveDi(x));
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+      setTrascinato(x);
+    },
+    onDragEnd: fine,
+  });
+  const bersaglio = (x, i) => ({
+    onDragEnter: e => { e.preventDefault(); if (trascinato) setGuida({ chiave: chiaveDi(x), lato: latoDi(e) }); },
+    onDragOver:  e => { e.preventDefault(); if (trascinato) setGuida({ chiave: chiaveDi(x), lato: latoDi(e) }); },
+    onDragLeave: () => setGuida(g => (g && g.chiave === chiaveDi(x) ? null : g)),
+    onDrop:      e => { e.preventDefault(); rilascia(i, latoDi(e)); },
+  });
+  const guidaDi = (x) => (guida && guida.chiave === chiaveDi(x) ? guida.lato : null);
+  const quiAggiunta = (dopo) => punto && stessoRif(punto.dopo, dopo) ? aggiunta : null;
+  const ultimo = elementi.length ? elementi[elementi.length - 1] : null;
+
+  return (
+    <div>
+      {nascosti > 0 && (
+        <div className="m-marginalia" style={{ fontSize: 12, marginBottom: 10 }}>{nascosti} ebook nascosti.</div>
+      )}
+
+      {/* la testa: lasciarci qualcosa lo porta all'inizio della fila */}
+      {testa.visibile && (
+        <div
+          onDragEnter={e => { e.preventDefault(); if (trascinato) setGuida({ chiave: 'testa', lato: 'dopo' }); }}
+          onDragOver={e => { e.preventDefault(); if (trascinato) setGuida({ chiave: 'testa', lato: 'dopo' }); }}
+          onDragLeave={() => setGuida(g => (g && g.chiave === 'testa' ? null : g))}
+          onDrop={e => { e.preventDefault(); const m = trascinato; fine(); if (m) onSposta(rifDi(m), null); }}>
+          <IntestazioneEtichetta testa nome={testa.nome} conteggio={conteggi.get('testa') || 0}
+            guida={guida && guida.chiave === 'testa' ? 'dopo' : null}
+            onRinomina={nome => onRinomina(null, nome)} onElimina={() => onElimina(null)}/>
+        </div>
+      )}
+      {quiAggiunta(null)}
+
+      {elementi.map((x, i) => (
+        <React.Fragment key={chiaveDi(x)}>
+          {x.tipo === 'etichetta' ? (
+            <IntestazioneEtichetta
+              nome={x.nome || 'Senza nome'} conteggio={conteggi.get(x.id) || 0}
+              guida={guidaDi(x)}
+              inTrascinamento={trascinato && chiaveDi(trascinato) === chiaveDi(x)}
+              sorgente={sorgente(x)} bersaglio={bersaglio(x, i)}
+              onRinomina={nome => onRinomina(x.id, nome)} onElimina={() => onElimina(x.id)}/>
+          ) : (
+            <Riga
+              libro={x.libro} guida={guidaDi(x)}
+              inTrascinamento={trascinato && chiaveDi(trascinato) === chiaveDi(x)}
+              sorgente={sorgente(x)} bersaglio={bersaglio(x, i)}
+              onApri={() => onApri(x.id)}
+              onMenu={e => onMenu(e, x.libro)}
+              onInserisciQui={() => onInserisci(rifDi(x))}/>
+          )}
+          {quiAggiunta(rifDi(x))}
+        </React.Fragment>
+      ))}
+
+      {/* in fondo: lasciarci qualcosa lo mette per ultimo */}
+      <div
+        onDragEnter={e => { e.preventDefault(); if (trascinato) setGuida({ chiave: 'coda', lato: 'prima' }); }}
+        onDragOver={e => { e.preventDefault(); if (trascinato) setGuida({ chiave: 'coda', lato: 'prima' }); }}
+        onDragLeave={() => setGuida(g => (g && g.chiave === 'coda' ? null : g))}
+        onDrop={e => {
+          e.preventDefault();
+          if (ultimo) rilascia(elementi.length - 1, 'dopo');
+          else { const m = trascinato; fine(); if (m) onSposta(rifDi(m), null); }
+        }}
+        style={{
+          marginTop: 8, paddingTop: 8,
+          borderTop: guida?.chiave === 'coda' ? '2px solid var(--m-terracotta)' : '2px solid transparent',
+        }}>
+        <button className="m-btn m-btn-ghost m-btn-sm" style={{ fontSize: 11 }}
+          onClick={() => onInserisci(rifDi(ultimo))}>+ aggiungi in fondo</button>
+      </div>
+      {punto && ultimo && stessoRif(punto.dopo, rifDi(ultimo)) ? null : null}
+    </div>
+  );
+}
+
+/* ── Un'etichetta nella vista a elenco ────────────────────────────────────────
+   Tutta la riga si trascina, non solo la maniglia: è quello che viene naturale
+   prendere. Doppio clic per rinominare.                                      */
+function IntestazioneEtichetta({ nome, conteggio, testa, guida, inTrascinamento,
+                                sorgente, bersaglio, onRinomina, onElimina }) {
   const [rinomino, setRinomino] = useState(false);
   const [val, setVal] = useState('');
   const [conferma, setConferma] = useState(false);
 
-  async function salva() {
+  const salva = () => {
     const v = val.trim();
     setRinomino(false);
-    if (base) { if (v && v !== etichettaBase) onRinominaBase(v); return; }
-    if (v === (sezione.name || '')) return;
-    try { await shelvesApi.updateSection(scaffaleId, sezione.id, { name: v || null }); onCambiato(); }
-    catch { toast('Errore nella rinomina', 'error'); }
-  }
-  async function elimina() {
-    setConferma(false);
-    if (base) return onEliminaBase();
-    try {
-      await shelvesApi.deleteSection(scaffaleId, sezione.id);
-      onCambiato();
-      toast('Sezione eliminata — i record restano sullo scaffale', 'success');
-    } catch { toast('Errore nell\'eliminazione', 'error'); }
-  }
+    if (v && v !== nome) onRinomina(v);
+  };
 
+  const trascinabile = !testa && !rinomino && sorgente;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-      {/* la maniglia: si trascina per spostare la sezione intera */}
-      {!rinomino && trascina && (
-        <span draggable onDragStart={trascina.onDragStart} onDragEnd={trascina.onDragEnd}
-          title="trascina per spostare la sezione"
-          style={{ cursor: 'grab', color: 'var(--m-ink-muted)', fontSize: 15, userSelect: 'none', padding: '0 2px' }}>⠿</span>
-      )}
+    <div
+      {...(trascinabile ? sorgente : {})}
+      {...(bersaglio || {})}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        margin: '22px 0 8px', padding: '4px 2px',
+        cursor: trascinabile ? 'grab' : 'default',
+        opacity: inTrascinamento ? 0.4 : 1,
+        borderTop: guida === 'prima' ? '3px solid var(--m-terracotta)' : '3px solid transparent',
+        borderBottom: guida === 'dopo' ? '3px solid var(--m-terracotta)' : '3px solid transparent',
+      }}>
+      {!testa && <span style={{ color: 'var(--m-ink-muted)', fontSize: 15, userSelect: 'none' }}>⠿</span>}
       {rinomino ? (
         <input className="m-input" autoFocus value={val} onChange={e => setVal(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') salva(); if (e.key === 'Escape') setRinomino(false); }}
@@ -754,11 +767,11 @@ function IntestazioneSezione({ sezione, base, conteggio, scaffaleId, onCambiato,
           style={{ fontSize: 17, fontFamily: "'EB Garamond', serif", padding: '2px 8px', flex: '0 1 300px' }}/>
       ) : (
         <div className="m-serif"
-          onDoubleClick={() => { setVal(base ? etichettaBase : (sezione.name || '')); setRinomino(true); }}
-          title="Doppio clic per rinominare"
-          style={{ fontSize: 19, fontWeight: 500, flexShrink: 0, cursor: 'text',
-                   fontStyle: base ? 'italic' : 'normal' }}>
-          {base ? etichettaBase : (sezione.name || 'Sezione senza nome')}
+          onDoubleClick={() => { setVal(nome); setRinomino(true); }}
+          title={testa ? 'Doppio clic per rinominare — è l’inizio della fila' : 'Trascina per spostarla · doppio clic per rinominare'}
+          style={{ fontSize: 19, fontWeight: 500, flexShrink: 0, userSelect: 'none',
+                   fontStyle: testa ? 'italic' : 'normal' }}>
+          {nome}
         </div>
       )}
 
@@ -771,9 +784,13 @@ function IntestazioneSezione({ sezione, base, conteggio, scaffaleId, onCambiato,
       )}
       {conferma && (
         <span style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-          <span style={{ fontSize: 11, color: 'var(--m-ink-muted)' }}>{base ? 'togliere questo ripiano?' : 'eliminare la sezione?'}</span>
-          <button className="m-btn m-btn-sm" style={{ fontSize: 10 }} onClick={elimina}>sì</button>
-          <button className="m-btn m-btn-ghost m-btn-sm" style={{ fontSize: 10 }} onClick={() => setConferma(false)}>no</button>
+          <span style={{ fontSize: 11, color: 'var(--m-ink-muted)' }}>
+            {testa ? 'togliere i nuovi arrivi?' : 'togliere l’etichetta?'}
+          </span>
+          <button className="m-btn m-btn-sm" style={{ fontSize: 10 }}
+            onClick={() => { setConferma(false); onElimina(); }}>sì</button>
+          <button className="m-btn m-btn-ghost m-btn-sm" style={{ fontSize: 10 }}
+            onClick={() => setConferma(false)}>no</button>
         </span>
       )}
     </div>
@@ -781,23 +798,19 @@ function IntestazioneSezione({ sezione, base, conteggio, scaffaleId, onCambiato,
 }
 
 /* ── Una riga dello scaffale ──────────────────────────────────────────────── */
-function Riga({ libro, sorvolata, inTrascinamento, onDragStart, onDragEnd, onDragOver,
-                onDragLeave, onDrop, onApri, onMenu, onInserisciQui }) {
+function Riga({ libro, guida, inTrascinamento, sorgente, bersaglio, onApri, onMenu, onInserisciQui }) {
   const [hover, setHover] = useState(false);
   return (
     <div
-      draggable
-      onDragStart={e => { e.dataTransfer?.setData('text/plain', 'libro:' + libro.id); onDragStart(e); }}
-      onDragEnd={onDragEnd}
-      onDragEnter={onDragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
+      {...sorgente} {...bersaglio}
       onContextMenu={onMenu}
       onDoubleClick={onApri}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       title="Doppio clic: apri la scheda · tasto destro: altre azioni"
       style={{
         display: 'flex', alignItems: 'center', gap: 11, padding: '5px 8px',
-        borderBottom: '1px solid var(--m-rule)',
-        borderTop: sorvolata ? '2px solid var(--m-terracotta)' : '2px solid transparent',
+        borderBottom: guida === 'dopo' ? '2px solid var(--m-terracotta)' : '1px solid var(--m-rule)',
+        borderTop: guida === 'prima' ? '2px solid var(--m-terracotta)' : '2px solid transparent',
         background: hover ? 'var(--m-rule)' : 'transparent',
         opacity: inTrascinamento ? 0.4 : 1,
         cursor: 'grab', userSelect: 'none',

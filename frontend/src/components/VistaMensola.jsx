@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import BookCover from './BookCover.jsx';
-import { tipoRecord } from './EbookMark.jsx';
 
 /* Lo scaffale guardato di fronte: le copertine affiancate, tutte della stessa
    altezza, appoggiate su un ripiano. Le regole di riordino e i menu sono gli
@@ -15,20 +14,6 @@ const SPAZIO_Y = 34;   // fra una riga e la successiva: ci sta il ripiano
 const SPESSORE = 3;    // del ripiano
 const STACCO = 5;      // fra il piede della copertina e il ripiano
 const MARGINE = 600;   // quanto prima del bordo si disegna una copertina
-
-/* ── dove va una sezione lasciata su un'altra ──────────────────────────────
-   Come in ogni elenco da riordinare: trascinandola in avanti va dopo quella
-   su cui la si lascia, trascinandola indietro va prima. Prima andava sempre
-   prima: così lasciarla sulla vicina di destra non cambiava nulla, e sembrava
-   che il trascinamento non funzionasse. Restituisce la sezione dopo cui
-   metterla (null = in testa) e da che lato mostrare la guida.               */
-export function dovePosare(ordine, daId, suId) {
-  const da = ordine.findIndex(x => x.id === daId);
-  const su = ordine.findIndex(x => x.id === suId);
-  if (da < 0 || su < 0 || da === su) return null;
-  if (da < su) return { dopo: suId, lato: 'dopo' };
-  return { dopo: su > 0 ? ordine[su - 1].id : null, lato: 'prima' };
-}
 
 /* ── la proporzione vera di una copertina ───────────────────────────────────
    Le copertine devono stare tutte alla stessa altezza e prendersi la larghezza
@@ -189,13 +174,18 @@ function Etichetta({ libro, versoDestra }) {
   );
 }
 
-/* ── il cartellino di una sezione, come una linguetta sul ripiano ──────────
-   Si rinomina con un doppio clic, si sposta trascinandola e si elimina. Anche
-   quella dei record senza sezione: i suoi volumi passano nella prima sezione,
-   e se non ce n'è nessuna la pagina lo dice invece di farlo.                */
-function Linguetta({ sezione, base, nome, conteggio, altezza, sorvolata, inTrascinamento, guida,
+/* ── la chiave di un elemento della fila ──────────────────────────────────── */
+const chiave = (x) => `${x.tipo}:${x.id}`;
+const rif = (x) => (x ? { tipo: x.tipo, id: x.id } : null);
+
+/* ── l'etichetta: un elemento della fila come un libro ───────────────────────
+   Si trascina come una copertina e i libri che la seguono, fino alla prossima
+   etichetta, sono suoi. Si rinomina con un doppio clic e si elimina con la ×:
+   i suoi libri passano al gruppo che la precede. Quella dei nuovi arrivi è la
+   testa della fila: si rinomina e si toglie, ma non si sposta.             */
+function Linguetta({ nome, conteggio, altezza, testa, inTrascinamento, guida,
                     onRinomina, onElimina,
-                    onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop }) {
+                    onDragStart, onDragEnd, onSorvola, onEsci, onRilascia }) {
   const [modifica, setModifica] = useState(null);   // null = non sto rinominando
   const [sopra, setSopra] = useState(false);
   const alta = Math.min(altezza, 56);
@@ -205,16 +195,22 @@ function Linguetta({ sezione, base, nome, conteggio, altezza, sorvolata, inTrasc
     setModifica(null);
     if (v && v !== nome) onRinomina(v);
   };
+  const lato = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return e.clientX < r.left + r.width / 2 ? 'prima' : 'dopo';
+  };
 
   return (
     <div
-      onDragEnter={onDragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
+      onDragEnter={e => { e.preventDefault(); onSorvola(lato(e)); }}
+      onDragOver={e => { e.preventDefault(); onSorvola(lato(e)); }}
+      onDragLeave={onEsci}
+      onDrop={e => { e.preventDefault(); onRilascia(lato(e)); }}
       onMouseEnter={() => setSopra(true)} onMouseLeave={() => setSopra(false)}
       style={{
         height: altezza, display: 'flex', alignItems: 'flex-end', flexShrink: 0,
-        position: 'relative', opacity: inTrascinamento ? 0.4 : 1,
+        position: 'relative', opacity: inTrascinamento ? 0.35 : 1,
       }}>
-      {/* dove cadrà la sezione trascinata */}
       {guida && (
         <div style={{
           position: 'absolute', [guida === 'prima' ? 'left' : 'right']: -Math.round(SPAZIO_X / 2) - 2,
@@ -223,18 +219,21 @@ function Linguetta({ sezione, base, nome, conteggio, altezza, sorvolata, inTrasc
         }}/>
       )}
       <div
-        draggable={modifica === null}
-        onDragStart={onDragStart} onDragEnd={onDragEnd}
+        draggable={!testa && modifica === null}
+        onDragStart={testa ? undefined : onDragStart}
+        onDragEnd={testa ? undefined : onDragEnd}
         onDoubleClick={() => setModifica(nome)}
-        title="doppio clic per rinominare, trascina per spostare"
+        title={testa
+          ? 'doppio clic per rinominare — è l’inizio della fila, non si sposta'
+          : 'trascina per spostarla, doppio clic per rinominare'}
         style={{
           height: alta, display: 'flex', flexDirection: 'column', justifyContent: 'center',
-          padding: '0 13px 0 10px', maxWidth: 200, cursor: modifica === null ? 'grab' : 'text',
-          background: sorvolata ? 'rgba(191,161,88,0.26)' : 'rgba(232,220,192,0.07)',
-          borderLeft: '3px solid var(--cine-gold)',
+          padding: '0 13px 0 10px', maxWidth: 200,
+          cursor: modifica !== null ? 'text' : testa ? 'default' : 'grab',
+          background: guida ? 'rgba(191,161,88,0.26)' : 'rgba(232,220,192,0.07)',
+          borderLeft: `3px solid ${testa ? 'var(--cine-gold-dim)' : 'var(--cine-gold)'}`,
           borderTop: '1px solid rgba(232,220,192,0.16)',
           borderBottom: '1px solid rgba(232,220,192,0.16)',
-          // la punta che sporge verso le copertine
           clipPath: 'polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%)',
         }}>
         {modifica === null ? (
@@ -242,6 +241,7 @@ function Linguetta({ sezione, base, nome, conteggio, altezza, sorvolata, inTrasc
             <div className="m-eyebrow" style={{
               fontSize: 10, lineHeight: 1.2, whiteSpace: 'nowrap',
               overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 168,
+              fontStyle: testa ? 'italic' : 'normal',
             }}>{nome}</div>
             <div className="m-marginalia" style={{ fontSize: 10, marginTop: 1 }}>
               {conteggio} {conteggio === 1 ? 'volume' : 'volumi'}
@@ -252,10 +252,7 @@ function Linguetta({ sezione, base, nome, conteggio, altezza, sorvolata, inTrasc
             autoFocus value={modifica}
             onChange={e => setModifica(e.target.value)}
             onBlur={salva}
-            onKeyDown={e => {
-              if (e.key === 'Enter') salva();
-              if (e.key === 'Escape') setModifica(null);
-            }}
+            onKeyDown={e => { if (e.key === 'Enter') salva(); if (e.key === 'Escape') setModifica(null); }}
             style={{
               width: 150, fontSize: 11, padding: '2px 4px', fontFamily: 'inherit',
               background: 'rgba(0,0,0,0.3)', color: 'var(--cine-cream)',
@@ -267,9 +264,9 @@ function Linguetta({ sezione, base, nome, conteggio, altezza, sorvolata, inTrasc
       {sopra && modifica === null && (
         <button
           onClick={onElimina}
-          title={base
-            ? 'togli questo ripiano — i suoi volumi passano nella prima sezione'
-            : 'elimina la sezione — i suoi volumi restano sullo scaffale'}
+          title={testa
+            ? 'togli i nuovi arrivi — i loro volumi passano alla prima etichetta'
+            : 'elimina l’etichetta — i suoi volumi passano al gruppo precedente'}
           style={{
             position: 'absolute', top: `calc(100% - ${alta}px - 9px)`, right: -4,
             width: 18, height: 18, borderRadius: '50%', zIndex: 36, padding: 0,
@@ -283,57 +280,54 @@ function Linguetta({ sezione, base, nome, conteggio, altezza, sorvolata, inTrasc
 }
 
 /* ── una copertina sul ripiano ────────────────────────────────────────────── */
-function Volume({ libro, altezza, trascinato, lato, selezionato,
+function Volume({ libro, altezza, inTrascinamento, guida, selezionato,
                  onApri, onMenu, onInserisciDopo, onSeleziona,
-                 onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop }) {
+                 onDragStart, onDragEnd, onSorvola, onEsci, onRilascia }) {
   const [sopra, setSopra] = useState(false);
-  const rif = useRef(null);
+  const rifEl = useRef(null);
   const [versoDestra, setVersoDestra] = useState(true);
   const immagine = libro.cover_local || libro.cover_url || null;
   const larghezza = Math.round(altezza * useProporzione(immagine));
 
-  // L'etichetta esce a destra, tranne quando non ci sta.
   const decidiLato = () => {
-    const r = rif.current?.getBoundingClientRect();
+    const r = rifEl.current?.getBoundingClientRect();
     if (r) setVersoDestra(r.left + 260 < window.innerWidth);
   };
-
-  // Dove cadrà: a sinistra o a destra di questa copertina, secondo il puntatore.
-  const sopraConLato = (e) => {
+  const lato = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
-    onDragOver(e, e.clientX < r.left + r.width / 2 ? 'prima' : 'dopo');
+    return e.clientX < r.left + r.width / 2 ? 'prima' : 'dopo';
   };
 
   return (
     <div
-      ref={rif}
+      ref={rifEl}
       style={{
         position: 'relative', height: altezza, flexShrink: 0,
         display: 'flex', alignItems: 'flex-end',
-        opacity: trascinato ? 0.3 : 1,
+        opacity: inTrascinamento ? 0.3 : 1,
       }}
       onMouseEnter={() => { decidiLato(); setSopra(true); }}
       onMouseLeave={() => setSopra(false)}
     >
-      {/* la guida: compare dal lato in cui cadrà la copertina trascinata */}
-      {lato && (
+      {guida && (
         <div style={{
-          position: 'absolute',
-          [lato === 'prima' ? 'left' : 'right']: -Math.round(SPAZIO_X / 2) - 1,
+          position: 'absolute', [guida === 'prima' ? 'left' : 'right']: -Math.round(SPAZIO_X / 2) - 1,
           bottom: -STACCO, width: 3, height: altezza + STACCO,
-          background: 'var(--m-terracotta, #c0533b)',
-          zIndex: 30, pointerEvents: 'none',
+          background: 'var(--m-terracotta, #c0533b)', zIndex: 30, pointerEvents: 'none',
         }}/>
       )}
 
       <div
         draggable
         onDragStart={onDragStart} onDragEnd={onDragEnd}
-        onDragEnter={sopraConLato} onDragOver={sopraConLato} onDragLeave={onDragLeave} onDrop={onDrop}
+        onDragEnter={e => { e.preventDefault(); onSorvola(lato(e)); }}
+        onDragOver={e => { e.preventDefault(); onSorvola(lato(e)); }}
+        onDragLeave={onEsci}
+        onDrop={e => { e.preventDefault(); onRilascia(lato(e)); }}
         onContextMenu={onMenu}
         onClick={e => {
           // con ctrl/cmd o shift si sceglie, altrimenti si apre la scheda
-          if (e.ctrlKey || e.metaKey || e.shiftKey) { e.preventDefault(); onSeleziona(e); }
+          if (e.ctrlKey || e.metaKey || e.shiftKey) { e.preventDefault(); onSeleziona(); }
           else onApri();
         }}
         title={libro.title}
@@ -348,12 +342,11 @@ function Volume({ libro, altezza, trascinato, lato, selezionato,
         </QuandoVisibile>
       </div>
 
-      {sopra && !trascinato && !lato && (
+      {sopra && !inTrascinamento && !guida && (
         <Etichetta libro={libro} versoDestra={versoDestra}/>
       )}
 
-      {/* inserisci subito dopo questa copertina */}
-      {sopra && !trascinato && (
+      {sopra && !inTrascinamento && (
         <button
           onClick={e => { e.stopPropagation(); onInserisciDopo(); }}
           title="Inserisci un libro qui accanto"
@@ -371,22 +364,21 @@ function Volume({ libro, altezza, trascinato, lato, selezionato,
 
 /* ── la mensola ───────────────────────────────────────────────────────────── */
 export default function VistaMensola({
-  sezioni, perSezione, sezioneBase, altezza, etichettaBase, mostraEbook = true,
-  trascinato, sopra,
-  onTrascinaInizio, onTrascinaFine, onSorvola, onEsci, onRilascia, onRilasciaMolti,
+  elementi,          // la fila che si vede: { tipo: 'etichetta', id, nome } | { tipo: 'libro', id, libro }
+  testa,             // { visibile, nome }: i nuovi arrivi, cioè i libri prima della prima etichetta
+  altezza, nascosti = 0,
+  onSposta,          // (elemento, dopo) — dopo = { tipo, id } | null (in testa alla fila)
+  onSpostaMolti,     // (idLibri, dopo)
   onApri, onMenu, onInserisci,
-  onRinominaSezione, onEliminaSezione, onSpostaEtichetta,
+  onRinomina, onElimina,      // (idEtichetta | null per la testa, …)
 }) {
-  const larghezzaTipica = Math.round(altezza * PROPORZIONE_PREDEFINITA);
+  const [trascinato, setTrascinato] = useState(null);   // l'elemento che si sta trascinando
+  const [guida, setGuida] = useState(null);             // { chiave, lato } dove cadrà
   const [selezione, setSelezione] = useState(() => new Set());
-  const [etichettaTrascinata, setEtichettaTrasc] = useState(null);
-  const [lato, setLato] = useState(null);          // { id, dove: 'prima'|'dopo' }
-  const [guidaSezione, setGuidaSezione] = useState(null);   // { id, lato }
 
-  useScorrimentoAutomatico(Boolean(trascinato || etichettaTrascinata));
+  useScorrimentoAutomatico(Boolean(trascinato));
 
-  /* Il ripiano: una fascia che si ripete a ogni riga. Il passo è l'altezza di
-     una copertina più lo spazio verticale, lo stesso che usa il flex. */
+  /* Il ripiano: una fascia che si ripete a ogni riga. */
   const passo = altezza + SPAZIO_Y;
   const inizio = altezza + STACCO;
   const ripiano = useMemo(() => ({
@@ -404,156 +396,141 @@ export default function VistaMensola({
     backgroundRepeat: 'repeat-y',
   }), [inizio, passo]);
 
-  /* Le etichette nell'ordine deciso: quella dei record senza sezione sta dove
-     è stata messa, e in mancanza di meglio in fondo. */
-  const ordinate = useMemo(() => {
-    const conNome = sezioni.filter(s => s.id !== sezioneBase);
-    const base = sezioni.find(s => s.id === sezioneBase);
-    if (!base) return conNome;
-    const massima = conNome.reduce((m, s) => Math.max(m, s.position ?? 0), 0);
-    const posBase = base.position ?? massima + 10;
-    return [...conNome, { ...base, position: posBase }]
-      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-  }, [sezioni, sezioneBase]);
-
-  const nascostiTotali = useMemo(() => {
-    if (mostraEbook) return 0;
-    return Object.values(perSezione).flat().filter(b => tipoRecord(b) === 'ebook').length;
-  }, [perSezione, mostraEbook]);
-
-  const inSelezione = (id) => selezione.has(id);
-  const svuota = () => setSelezione(new Set());
-
-  const seleziona = (id) => setSelezione(s => {
-    const n = new Set(s);
-    if (n.has(id)) n.delete(id); else n.add(id);
-    return n;
-  });
-
-  /* Rilascio. Se si trascina una copertina scelta, si muove tutto il gruppo,
-     nell'ordine in cui sta sullo scaffale. */
-  const rilascia = (sezioneId, dopoId) => {
-    setLato(null);
-    if (etichettaTrascinata) {
-      // una sezione lasciata su una copertina segue la regola della sezione di quella
-      const p = dovePosare(ordinate, etichettaTrascinata, sezioneId);
-      if (p) onSpostaEtichetta(etichettaTrascinata, p.dopo);
-      setEtichettaTrasc(null); setGuidaSezione(null);
-      return;
+  /* Quanti libri ha ogni etichetta, e quanti sono in testa. */
+  const conteggi = useMemo(() => {
+    const m = new Map();
+    let corrente = 'testa';
+    m.set('testa', 0);
+    for (const x of elementi) {
+      if (x.tipo === 'etichetta') { corrente = x.id; m.set(corrente, 0); }
+      else m.set(corrente, (m.get(corrente) || 0) + 1);
     }
-    if (trascinato && selezione.size > 1 && selezione.has(trascinato.id)) {
-      const ordine = ordinate.flatMap(s => (perSezione[s.id] || []))
-        .filter(b => selezione.has(b.id)).map(b => b.id);
-      svuota();
-      onRilasciaMolti(sezioneId, dopoId, ordine);
-      return;
-    }
-    onRilascia(sezioneId, dopoId);
+    return m;
+  }, [elementi]);
+
+  const fine = () => { setTrascinato(null); setGuida(null); };
+
+  const inizia = (x) => (e) => {
+    // senza un dato da trasportare Firefox non fa partire il trascinamento
+    e.dataTransfer?.setData('text/plain', chiave(x));
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+    setTrascinato(x);
   };
 
-  const celle = [];
-  for (const sez of ordinate) {
-    const tutte = perSezione[sez.id] || [];
-    const righe = mostraEbook ? tutte : tutte.filter(b => tipoRecord(b) !== 'ebook');
-    const base = sez.id === sezioneBase;
-    const ultimoId = righe.length ? righe[righe.length - 1].id : null;
+  /* Dove va ciò che si lascia sull'elemento i, dal lato indicato. */
+  const rilascia = (i, lato) => {
+    const mosso = trascinato;
+    fine();
+    if (!mosso) return;
+    const dopo = lato === 'dopo' ? rif(elementi[i]) : (i > 0 ? rif(elementi[i - 1]) : null);
+    if (dopo && dopo.tipo === mosso.tipo && dopo.id === mosso.id) return;   // resta dov'è
 
+    // più copertine scelte: si muovono tutte, nell'ordine in cui stanno
+    if (mosso.tipo === 'libro' && selezione.size > 1 && selezione.has(mosso.id)) {
+      const ordine = elementi.filter(x => x.tipo === 'libro' && selezione.has(x.id)).map(x => x.id);
+      setSelezione(new Set());
+      onSpostaMolti(ordine, dopo);
+      return;
+    }
+    onSposta(rif(mosso), dopo);
+  };
+
+  const sorvola = (x) => (lato) => {
+    if (!trascinato) return;
+    setGuida(g => (g && g.chiave === chiave(x) && g.lato === lato ? g : { chiave: chiave(x), lato }));
+  };
+  const esci = (x) => () => setGuida(g => (g && g.chiave === chiave(x) ? null : g));
+  const guidaPer = (x) => (guida && guida.chiave === chiave(x) ? guida.lato : null);
+
+  const celle = [];
+
+  // la testa: i nuovi arrivi. Lasciarci qualcosa lo porta all'inizio della fila.
+  if (testa.visibile) {
     celle.push(
-      <Linguetta
-        key={`linguetta-${sez.id}`}
-        sezione={sez} base={base}
-        nome={base ? (etichettaBase || 'Nuovi arrivi') : (sez.name || 'Senza nome')}
-        conteggio={righe.length}
-        altezza={altezza}
-        sorvolata={sopra === `testa-${sez.id}`}
-        inTrascinamento={etichettaTrascinata === sez.id}
-        guida={guidaSezione && guidaSezione.id === sez.id ? guidaSezione.lato : null}
-        onRinomina={nome => onRinominaSezione(sez.id, nome)}
-        onElimina={() => onEliminaSezione(sez.id)}
-        onDragStart={e => {
-          // senza un dato da trasportare Firefox non fa partire il trascinamento
-          e.dataTransfer?.setData('text/plain', 'sezione:' + sez.id);
-          if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-          setEtichettaTrasc(sez.id);
-        }}
-        onDragEnd={() => { setEtichettaTrasc(null); setGuidaSezione(null); onTrascinaFine(); }}
-        onDragOver={e => {
-          e.preventDefault();
-          onSorvola(`testa-${sez.id}`);
-          if (etichettaTrascinata) {
-            const p = dovePosare(ordinate, etichettaTrascinata, sez.id);
-            setGuidaSezione(p ? { id: sez.id, lato: p.lato } : null);
-          }
-        }}
-        onDragLeave={() => { onEsci(`testa-${sez.id}`); setGuidaSezione(g => (g && g.id === sez.id ? null : g)); }}
-        onDrop={e => {
-          e.preventDefault();
-          if (etichettaTrascinata) {
-            const p = dovePosare(ordinate, etichettaTrascinata, sez.id);
-            if (p) onSpostaEtichetta(etichettaTrascinata, p.dopo);
-            setEtichettaTrasc(null); setGuidaSezione(null);
-          } else {
-            rilascia(sez.id, null);
-          }
+      <Linguetta key="testa"
+        testa nome={testa.nome} conteggio={conteggi.get('testa') || 0} altezza={altezza}
+        guida={guida && guida.chiave === 'testa' ? 'dopo' : null}
+        onRinomina={nome => onRinomina(null, nome)}
+        onElimina={() => onElimina(null)}
+        onSorvola={() => { if (trascinato) setGuida({ chiave: 'testa', lato: 'dopo' }); }}
+        onEsci={() => setGuida(g => (g && g.chiave === 'testa' ? null : g))}
+        onRilascia={() => {
+          const mosso = trascinato; fine();
+          if (!mosso) return;
+          if (mosso.tipo === 'libro' && selezione.size > 1 && selezione.has(mosso.id)) {
+            const ordine = elementi.filter(x => x.tipo === 'libro' && selezione.has(x.id)).map(x => x.id);
+            setSelezione(new Set());
+            onSpostaMolti(ordine, null);
+          } else onSposta(rif(mosso), null);
         }}
       />
     );
+  }
 
-    righe.forEach((b, i) => {
-      const guida = lato && lato.id === b.id ? lato.dove : null;
+  elementi.forEach((x, i) => {
+    if (x.tipo === 'etichetta') {
       celle.push(
-        <Volume
-          key={b.id} libro={b} altezza={altezza}
-          trascinato={trascinato?.id === b.id || (trascinato && selezione.has(b.id))}
-          lato={guida}
-          selezionato={inSelezione(b.id)}
-          onApri={() => onApri(b.id)}
-          onMenu={e => onMenu(e, b, sez.id)}
-          onSeleziona={() => seleziona(b.id)}
-          onInserisciDopo={() => onInserisci(base ? null : sez.id, b.id)}
-          onDragStart={e => {
-            e.dataTransfer?.setData('text/plain', 'libro:' + b.id);
-            if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-            setLato(null); onTrascinaInizio(b);
-          }}
-          onDragEnd={() => { setLato(null); onTrascinaFine(); }}
-          onDragOver={(e, dove) => { e.preventDefault(); setLato({ id: b.id, dove }); onSorvola(b.id); }}
-          onDragLeave={() => { setLato(l => (l && l.id === b.id ? null : l)); onEsci(b.id); }}
-          onDrop={e => {
-            e.preventDefault();
-            // "prima" significa dopo il volume che precede; se non c'è, in testa
-            const dove = lato && lato.id === b.id ? lato.dove : 'dopo';
-            const dopoId = dove === 'dopo' ? b.id : (i > 0 ? righe[i - 1].id : null);
-            rilascia(sez.id, dopoId);
-          }}
+        <Linguetta key={chiave(x)}
+          nome={x.nome || 'Senza nome'} conteggio={conteggi.get(x.id) || 0} altezza={altezza}
+          inTrascinamento={trascinato && chiave(trascinato) === chiave(x)}
+          guida={guidaPer(x)}
+          onRinomina={nome => onRinomina(x.id, nome)}
+          onElimina={() => onElimina(x.id)}
+          onDragStart={inizia(x)} onDragEnd={fine}
+          onSorvola={sorvola(x)} onEsci={esci(x)}
+          onRilascia={lato => rilascia(i, lato)}
         />
       );
-    });
+    } else {
+      const sceltoIo = selezione.has(x.id);
+      celle.push(
+        <Volume key={chiave(x)}
+          libro={x.libro} altezza={altezza}
+          inTrascinamento={trascinato && (chiave(trascinato) === chiave(x)
+            || (trascinato.tipo === 'libro' && sceltoIo && selezione.has(trascinato.id)))}
+          guida={guidaPer(x)}
+          selezionato={sceltoIo}
+          onApri={() => onApri(x.id)}
+          onMenu={e => onMenu(e, x.libro)}
+          onSeleziona={() => setSelezione(s => {
+            const n = new Set(s); if (n.has(x.id)) n.delete(x.id); else n.add(x.id); return n;
+          })}
+          onInserisciDopo={() => onInserisci(rif(x))}
+          onDragStart={inizia(x)} onDragEnd={fine}
+          onSorvola={sorvola(x)} onEsci={esci(x)}
+          onRilascia={lato => rilascia(i, lato)}
+        />
+      );
+    }
+  });
 
-    // in coda alla sezione: si rilascia qui per metterlo per ultimo
-    celle.push(
-      <div
-        key={`coda-${sez.id}`}
-        onDragEnter={e => { e.preventDefault(); onSorvola(`coda-${sez.id}`); }}
-        onDragOver={e => { e.preventDefault(); onSorvola(`coda-${sez.id}`); }}
-        onDragLeave={() => onEsci(`coda-${sez.id}`)}
-        onDrop={e => { e.preventDefault(); rilascia(sez.id, ultimoId); }}
-        onClick={() => onInserisci(base ? null : sez.id, ultimoId)}
-        title="Aggiungi in fondo a questa sezione"
-        style={{
-          height: altezza, width: Math.max(34, Math.round(larghezzaTipica * 0.42)),
-          flexShrink: 0, display: 'flex', alignItems: 'flex-end', cursor: 'pointer',
-        }}>
-        <div style={{
-          width: '100%', height: Math.min(altezza, 58),
-          border: `1px dashed ${sopra === `coda-${sez.id}` ? 'var(--m-terracotta, #c0533b)' : 'rgba(232,220,192,0.22)'}`,
-          background: sopra === `coda-${sez.id}` ? 'rgba(192,83,59,0.12)' : 'transparent',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'rgba(232,220,192,0.45)', fontSize: 16,
-        }}>+</div>
-      </div>
-    );
-  }
+  // in fondo alla fila: lasciarci qualcosa lo mette per ultimo
+  const ultimo = elementi.length ? elementi[elementi.length - 1] : null;
+  celle.push(
+    <div key="coda"
+      onDragEnter={e => { e.preventDefault(); if (trascinato) setGuida({ chiave: 'coda', lato: 'dopo' }); }}
+      onDragOver={e => { e.preventDefault(); if (trascinato) setGuida({ chiave: 'coda', lato: 'dopo' }); }}
+      onDragLeave={() => setGuida(g => (g && g.chiave === 'coda' ? null : g))}
+      onDrop={e => {
+        e.preventDefault();
+        if (ultimo) rilascia(elementi.length - 1, 'dopo');
+        else { const m = trascinato; fine(); if (m) onSposta(rif(m), null); }
+      }}
+      onClick={() => onInserisci(rif(ultimo))}
+      title="Aggiungi in fondo"
+      style={{
+        height: altezza, width: Math.max(34, Math.round(altezza * PROPORZIONE_PREDEFINITA * 0.42)),
+        flexShrink: 0, display: 'flex', alignItems: 'flex-end', cursor: 'pointer',
+      }}>
+      <div style={{
+        width: '100%', height: Math.min(altezza, 58),
+        border: `1px dashed ${guida?.chiave === 'coda' ? 'var(--m-terracotta, #c0533b)' : 'rgba(232,220,192,0.22)'}`,
+        background: guida?.chiave === 'coda' ? 'rgba(192,83,59,0.12)' : 'transparent',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: 'rgba(232,220,192,0.45)', fontSize: 16,
+      }}>+</div>
+    </div>
+  );
 
   return (
     <>
@@ -570,13 +547,13 @@ export default function VistaMensola({
             trascinane uno per spostarli tutti insieme
           </span>
           <button className="m-btn m-btn-ghost m-btn-sm" style={{ fontSize: 10, marginLeft: 'auto' }}
-            onClick={svuota}>annulla la scelta</button>
+            onClick={() => setSelezione(new Set())}>annulla la scelta</button>
         </div>
       )}
 
-      {nascostiTotali > 0 && (
+      {nascosti > 0 && (
         <div className="m-marginalia" style={{ fontSize: 12, marginBottom: 10 }}>
-          {nascostiTotali} ebook nascosti.
+          {nascosti} ebook nascosti.
         </div>
       )}
 
@@ -590,8 +567,8 @@ export default function VistaMensola({
       </div>
 
       <div className="m-marginalia" style={{ fontSize: 11.5, marginTop: 14, opacity: 0.75 }}>
-        Doppio clic su un cartellino per rinominarlo, trascinalo per spostarlo.
-        Ctrl o Cmd mentre clicchi una copertina per sceglierne più di una.
+        Le etichette si trascinano come i libri: i volumi che seguono un’etichetta sono suoi.
+        Doppio clic su un’etichetta per rinominarla. Ctrl o Cmd per scegliere più copertine.
       </div>
     </>
   );
